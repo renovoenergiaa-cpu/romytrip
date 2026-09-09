@@ -1,0 +1,699 @@
+-- ==========================================
+-- MENSAGENS DE ÁUDIO NO CHAT
+-- Execute este script no SQL Editor do Supabase
+-- ==========================================
+
+-- 1. Cria o bucket 'chat_audio' caso ele não exista e define como público
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('chat_audio', 'chat_audio', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- 2. (Removido, o Supabase já ativa isso por padrão)
+
+-- 3. Permite que QUALQUER PESSOA veja os áudios (Necessário para escutar)
+CREATE POLICY "Audios públicos" 
+ON storage.objects FOR SELECT 
+USING (bucket_id = 'chat_audio');
+
+-- 4. Permite que usuários logados façam UPLOAD de áudios
+CREATE POLICY "Upload de audios" 
+ON storage.objects FOR INSERT 
+TO authenticated 
+WITH CHECK (bucket_id = 'chat_audio');
+
+-- 5. Adiciona a coluna de áudio na tabela de mensagens
+ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS audio_url text;
+-- ==========================================
+-- Atualização do Banco de Dados: Gerenciamento de Chats
+-- Execute este script no SQL Editor do Supabase
+-- ==========================================
+
+-- 1. Adicionar colunas is_archived e is_muted na tabela conversation_participants
+ALTER TABLE public.conversation_participants 
+ADD COLUMN IF NOT EXISTS is_archived boolean default false not null,
+ADD COLUMN IF NOT EXISTS is_muted boolean default false not null;
+
+-- 2. Atualizar as políticas do RLS para permitir que o próprio usuário edite seu estado na tabela conversation_participants
+-- Atualmente, os usuários podem Inserir e Ver, mas não Alterar ou Deletar.
+
+-- Usuário pode alterar APENAS o seu próprio registro em conversation_participants (para arquivar/silenciar)
+DROP POLICY IF EXISTS "Usuários gerenciam sua participação na conversa" ON public.conversation_participants;
+CREATE POLICY "Usuários gerenciam sua participação na conversa" ON public.conversation_participants
+  FOR UPDATE USING (user_id = auth.uid());
+
+-- Usuário pode sair (deletar) da conversa (apenas o seu próprio registro)
+DROP POLICY IF EXISTS "Usuários podem sair da conversa" ON public.conversation_participants;
+CREATE POLICY "Usuários podem sair da conversa" ON public.conversation_participants
+  FOR DELETE USING (user_id = auth.uid());
+
+-- NOTA: O dono de um grupo também pode excluir a conversa inteira.
+-- Essa permissão já pode ser validada pela tabela `communities` (ou vamos criar uma para a tabela `conversations`)
+DROP POLICY IF EXISTS "Donos podem excluir conversas" ON public.conversations;
+CREATE POLICY "Donos podem excluir conversas" ON public.conversations
+  FOR DELETE USING (
+    -- Permite deletar se for um chat privado 1-a-1 (quando sobra 0 membros) 
+    -- ou se o usuário for o criador da comunidade associada a esse grupo
+    EXISTS (
+      SELECT 1 FROM public.communities 
+      WHERE group_chat_id = id AND created_by = auth.uid()
+    )
+    OR NOT is_group -- Se não for grupo, permitimos deletar? Melhor apenas deixar o usuário sair de conversation_participants
+  );
+-- Communities
+CREATE TABLE IF NOT EXISTS public.communities (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  title text NOT NULL,
+  type text NOT NULL, -- 'Temporária', 'Privada', 'Pública', 'Internacional'
+  location text,
+  start_date timestamp with time zone,
+  end_date timestamp with time zone,
+  color text DEFAULT '#A855F7',
+  bg_color text DEFAULT '#F3E8FF',
+  description text,
+  created_by uuid REFERENCES public.users(id),
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  group_chat_id uuid REFERENCES public.conversations(id) ON DELETE SET NULL
+);
+
+-- Community Members
+CREATE TABLE IF NOT EXISTS public.community_members (
+  community_id uuid REFERENCES public.communities(id) ON DELETE CASCADE,
+  user_id uuid REFERENCES public.users(id) ON DELETE CASCADE,
+  role text DEFAULT 'member', -- 'admin', 'member'
+  joined_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  PRIMARY KEY (community_id, user_id)
+);
+
+-- Community Posts
+CREATE TABLE IF NOT EXISTS public.community_posts (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  community_id uuid REFERENCES public.communities(id) ON DELETE CASCADE,
+  user_id uuid REFERENCES public.users(id) ON DELETE CASCADE,
+  content text,
+  media_url text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now())
+);
+
+-- Turn on RLS
+ALTER TABLE public.communities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.community_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.community_posts ENABLE ROW LEVEL SECURITY;
+
+-- Policies for communities
+-- Anyone can see public and international communities, or communities they are a member of
+CREATE POLICY "View communities" ON public.communities
+  FOR SELECT USING (
+    type IN ('Pública', 'Internacional', 'Temporária')
+    OR EXISTS (SELECT 1 FROM public.community_members WHERE community_id = communities.id AND user_id = auth.uid())
+  );
+
+-- Only authenticated users can insert communities
+CREATE POLICY "Insert communities" ON public.communities
+  FOR INSERT WITH CHECK (auth.uid() = created_by);
+
+-- Policies for community_members
+-- Anyone can see members of a community they can see
+CREATE POLICY "View community members" ON public.community_members
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM public.communities WHERE id = community_members.community_id)
+  );
+
+-- Users can join communities
+CREATE POLICY "Insert community members" ON public.community_members
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- Policies for community_posts
+-- Users can view posts of public communities or communities they are members of
+CREATE POLICY "View community posts" ON public.community_posts
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM public.communities WHERE id = community_posts.community_id AND type IN ('Pública', 'Internacional', 'Temporária'))
+    OR EXISTS (SELECT 1 FROM public.community_members WHERE community_id = community_posts.community_id AND user_id = auth.uid())
+  );
+
+-- Users can insert posts in communities they are members of
+CREATE POLICY "Insert community posts" ON public.community_posts
+  FOR INSERT WITH CHECK (
+    auth.uid() = user_id AND 
+    EXISTS (SELECT 1 FROM public.community_members WHERE community_id = community_posts.community_id AND user_id = auth.uid())
+  );
+-- Drop the recursive policies
+DROP POLICY IF EXISTS "View communities" ON public.communities;
+DROP POLICY IF EXISTS "View community members" ON public.community_members;
+DROP POLICY IF EXISTS "View community posts" ON public.community_posts;
+DROP POLICY IF EXISTS "Delete communities" ON public.communities;
+
+-- Recreate "View communities" avoiding recursion
+-- We check if the type is public/international/temp, OR if the current user has a row in community_members for this community.
+CREATE POLICY "View communities" ON public.communities
+  FOR SELECT USING (
+    type IN ('Pública', 'Internacional', 'Temporária')
+    OR (
+      -- Using a direct check that doesn't trigger "View community members" recursion
+      -- By checking auth.uid() directly against community_members
+      EXISTS (
+        SELECT 1 FROM public.community_members 
+        WHERE community_id = id AND user_id = auth.uid()
+      )
+    )
+  );
+
+-- Recreate "View community members" without referencing communities
+-- Anyone can see members of a community. If they can't see the community, they won't know the ID anyway.
+CREATE POLICY "View community members" ON public.community_members
+  FOR SELECT USING (true);
+
+-- Recreate "View community posts" without referencing communities table to avoid recursion
+-- Anyone can see posts of communities they know the ID of, or we restrict it to members.
+CREATE POLICY "View community posts" ON public.community_posts
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM public.communities 
+      WHERE id = community_posts.community_id AND type IN ('Pública', 'Internacional', 'Temporária')
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.community_members 
+      WHERE community_id = community_posts.community_id AND user_id = auth.uid()
+    )
+  );
+
+-- Allow creator to delete their own community
+CREATE POLICY "Delete communities" ON public.communities
+  FOR DELETE USING (auth.uid() = created_by);
+-- ==========================================
+-- FASE 7: Sistema de Conexões (Matches)
+-- Execute este script no SQL Editor do Supabase
+-- ==========================================
+
+-- 1. Cria a tabela de Conexões (Dropa a anterior se existir para evitar conflitos)
+DROP TABLE IF EXISTS public.connections CASCADE;
+
+CREATE TABLE public.connections (
+  id uuid default gen_random_uuid() primary key,
+  sender_id uuid references public.users(id) on delete cascade not null,
+  receiver_id uuid references public.users(id) on delete cascade not null,
+  status text check (status in ('pending', 'accepted', 'rejected')) default 'pending' not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  UNIQUE(sender_id, receiver_id) -- Impede múltiplas solicitações entre as mesmas pessoas
+);
+
+-- Habilitar RLS
+ALTER TABLE public.connections ENABLE ROW LEVEL SECURITY;
+
+-- 2. Políticas de Segurança (RLS)
+-- O usuário pode ver as conexões onde ele é o remetente ou o destinatário
+CREATE POLICY "Usuários veem suas próprias conexões"
+  ON public.connections FOR SELECT
+  USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+
+-- O usuário pode enviar conexões (inserir) onde ele é o remetente
+CREATE POLICY "Usuários podem solicitar conexões"
+  ON public.connections FOR INSERT
+  WITH CHECK (auth.uid() = sender_id);
+
+-- O usuário só pode alterar o status (aceitar/recusar) se ele for o destinatário
+CREATE POLICY "Destinatários podem responder solicitações"
+  ON public.connections FOR UPDATE
+  USING (auth.uid() = receiver_id);
+
+-- Permitir que usuários deletem conexões caso queiram desfazer
+CREATE POLICY "Usuários podem desfazer conexões"
+  ON public.connections FOR DELETE
+  USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
+-- ==========================================
+-- FASE 8: Discovery Dashboard e Ajudinha
+-- Execute este script no SQL Editor do Supabase
+-- ==========================================
+
+-- 1. Adiciona coluna is_free na tabela users
+ALTER TABLE IF EXISTS public.users ADD COLUMN IF NOT EXISTS is_free boolean DEFAULT false;
+
+-- 2. Cria tabela de Eventos Locais
+DROP TABLE IF EXISTS public.events CASCADE;
+CREATE TABLE public.events (
+  id uuid default gen_random_uuid() primary key,
+  title text not null,
+  location_name text not null,
+  city text not null,
+  event_time text not null,
+  participants_count integer default 0,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Eventos são públicos" ON public.events FOR SELECT USING (true);
+
+-- Inserir alguns eventos fictícios para o Dashboard
+INSERT INTO public.events (title, location_name, city, event_time, participants_count) VALUES
+('Tour Eiffel ao Pôr do Sol', 'Torre Eiffel', 'Paris', '18:30', 15),
+('Happy Hour Le Marais', 'Le Marais', 'Paris', '19:00', 8),
+('Cruzeiro no Sena', 'Pont Neuf', 'Paris', '20:00', 32);
+
+-- 3. Cria tabela de Pedidos de Ajuda (Ajudinha)
+DROP TABLE IF EXISTS public.help_requests CASCADE;
+CREATE TABLE public.help_requests (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.users(id) on delete cascade not null,
+  category text not null, -- 'Farmácia', 'Restaurante', 'Transporte', etc
+  content text not null,
+  city text not null,
+  status text check (status in ('active', 'resolved')) default 'active' not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+ALTER TABLE public.help_requests ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Pedidos de ajuda são públicos" ON public.help_requests FOR SELECT USING (true);
+CREATE POLICY "Usuários criam seus pedidos" ON public.help_requests FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Usuários atualizam seus pedidos" ON public.help_requests FOR UPDATE USING (auth.uid() = user_id);
+
+-- Inserir ajuda fictícia inicial para não começar vazio
+INSERT INTO public.help_requests (user_id, category, content, city, status)
+SELECT id, 'Restaurante', 'Qual o melhor lugar para comer croissant perto daqui?', 'Paris', 'active'
+FROM public.users LIMIT 1;
+-- ==========================================
+-- FASE 6: Interações do Romy Feed (Likes/Comments)
+-- Execute este script no SQL Editor do Supabase
+-- ==========================================
+
+-- 1. Cria a tabela de Curtidas de Posts
+CREATE TABLE IF NOT EXISTS public.post_likes (
+  id uuid default gen_random_uuid() primary key,
+  post_id uuid references public.posts(id) on delete cascade not null,
+  user_id uuid references public.users(id) on delete cascade not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  UNIQUE(post_id, user_id) -- Impede que um usuário curta o mesmo post mais de uma vez
+);
+
+-- Habilitar RLS
+ALTER TABLE public.post_likes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Curtidas são visíveis para todos"
+  ON public.post_likes FOR SELECT USING (true);
+
+CREATE POLICY "Usuários podem curtir posts"
+  ON public.post_likes FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Usuários podem descurtir posts"
+  ON public.post_likes FOR DELETE USING (auth.uid() = user_id);
+
+-- 2. Cria a tabela de Comentários
+CREATE TABLE IF NOT EXISTS public.comments (
+  id uuid default gen_random_uuid() primary key,
+  post_id uuid references public.posts(id) on delete cascade not null,
+  user_id uuid references public.users(id) on delete cascade not null,
+  content text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Habilitar RLS
+ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Comentários são visíveis para todos"
+  ON public.comments FOR SELECT USING (true);
+
+CREATE POLICY "Usuários podem comentar em posts"
+  ON public.comments FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Usuários podem deletar próprios comentários"
+  ON public.comments FOR DELETE USING (auth.uid() = user_id);
+-- ==========================================
+-- FASE 9: Messenger & Chat
+-- Execute este script no SQL Editor do Supabase
+-- ==========================================
+
+-- 1. Cria tabela de conversas
+DROP TABLE IF EXISTS public.conversations CASCADE;
+CREATE TABLE public.conversations (
+  id uuid default gen_random_uuid() primary key,
+  is_group boolean default false not null,
+  name text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
+
+-- 2. Cria tabela de participantes
+DROP TABLE IF EXISTS public.conversation_participants CASCADE;
+CREATE TABLE public.conversation_participants (
+  conversation_id uuid references public.conversations(id) on delete cascade not null,
+  user_id uuid references public.users(id) on delete cascade not null,
+  joined_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  PRIMARY KEY (conversation_id, user_id)
+);
+
+ALTER TABLE public.conversation_participants ENABLE ROW LEVEL SECURITY;
+
+-- 3. Cria tabela de mensagens
+DROP TABLE IF EXISTS public.messages CASCADE;
+CREATE TABLE public.messages (
+  id uuid default gen_random_uuid() primary key,
+  conversation_id uuid references public.conversations(id) on delete cascade not null,
+  sender_id uuid references public.users(id) on delete cascade not null,
+  text text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  read_at timestamp with time zone
+);
+
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+
+-- ==========================================
+-- Políticas RLS
+-- ==========================================
+
+-- Usuários podem ver as conversas nas quais eles são participantes
+CREATE POLICY "Usuários veem suas conversas" ON public.conversations FOR SELECT
+USING (
+  EXISTS (
+    SELECT 1 FROM public.conversation_participants
+    WHERE conversation_id = public.conversations.id AND user_id = auth.uid()
+  )
+);
+
+-- Usuários podem criar conversas
+CREATE POLICY "Usuários criam conversas" ON public.conversations FOR INSERT WITH CHECK (true);
+
+-- Usuários veem participantes de conversas onde eles estão
+CREATE POLICY "Usuários veem participantes de suas conversas" ON public.conversation_participants FOR SELECT
+USING (
+  EXISTS (
+    SELECT 1 FROM public.conversation_participants cp
+    WHERE cp.conversation_id = public.conversation_participants.conversation_id AND cp.user_id = auth.uid()
+  )
+);
+
+-- Usuários podem adicionar participantes
+CREATE POLICY "Usuários adicionam participantes" ON public.conversation_participants FOR INSERT WITH CHECK (true);
+
+-- Usuários veem mensagens de conversas onde eles estão
+CREATE POLICY "Usuários veem mensagens de suas conversas" ON public.messages FOR SELECT
+USING (
+  EXISTS (
+    SELECT 1 FROM public.conversation_participants
+    WHERE conversation_id = public.messages.conversation_id AND user_id = auth.uid()
+  )
+);
+
+-- Usuários enviam mensagens em suas conversas
+CREATE POLICY "Usuários enviam mensagens em suas conversas" ON public.messages FOR INSERT
+WITH CHECK (
+  sender_id = auth.uid() AND
+  EXISTS (
+    SELECT 1 FROM public.conversation_participants
+    WHERE conversation_id = public.messages.conversation_id AND user_id = auth.uid()
+  )
+);
+
+-- ==========================================
+-- Trigger para atualizar a conversa via RPC
+-- ==========================================
+-- Adicionaremos Realtime na tabela messages pelo Dashboard do Supabase.
+-- ==========================================
+-- CORREÇÃO DE POLÍTICAS DE SEGURANÇA (RLS)
+-- Execute este script no SQL Editor do Supabase
+-- para resolver o erro "infinite recursion"
+-- ==========================================
+
+-- 1. Cria uma função segura que ignora o RLS (Security Definer) 
+-- para checar se o usuário está na conversa, evitando o loop infinito.
+CREATE OR REPLACE FUNCTION public.is_conversation_member(conv_id uuid)
+RETURNS boolean AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.conversation_participants
+    WHERE conversation_id = conv_id AND user_id = auth.uid()
+  );
+$$ LANGUAGE sql SECURITY DEFINER;
+
+-- 2. Remove as políticas antigas problemáticas
+DROP POLICY IF EXISTS "Usuários veem participantes de suas conversas" ON public.conversation_participants;
+DROP POLICY IF EXISTS "Usuários veem suas conversas" ON public.conversations;
+DROP POLICY IF EXISTS "Usuários veem mensagens de suas conversas" ON public.messages;
+DROP POLICY IF EXISTS "Usuários enviam mensagens em suas conversas" ON public.messages;
+
+-- 3. Recria as políticas usando a nova função segura
+CREATE POLICY "Usuários veem participantes de suas conversas" ON public.conversation_participants FOR SELECT
+USING (
+  user_id = auth.uid() OR public.is_conversation_member(conversation_id)
+);
+
+CREATE POLICY "Usuários veem suas conversas" ON public.conversations FOR SELECT
+USING (
+  public.is_conversation_member(id)
+);
+
+CREATE POLICY "Usuários veem mensagens de suas conversas" ON public.messages FOR SELECT
+USING (
+  public.is_conversation_member(conversation_id)
+);
+
+CREATE POLICY "Usuários enviam mensagens em suas conversas" ON public.messages FOR INSERT
+WITH CHECK (
+  sender_id = auth.uid() AND
+  public.is_conversation_member(conversation_id)
+);
+-- ==========================================
+-- FASE 5.2: Tabela de Posts do Romy Feed
+-- Execute este script no SQL Editor do Supabase
+-- ==========================================
+
+-- 1. Cria a tabela de Posts
+CREATE TABLE IF NOT EXISTS public.posts (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.users(id) on delete cascade not null,
+  media_url text not null,
+  destination text not null,
+  description text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Habilitar RLS para Posts
+ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
+
+-- 2. Políticas de Segurança (RLS) para Posts
+-- Permitir leitura pública dos posts
+CREATE POLICY "Posts são visíveis para todos"
+  ON public.posts
+  FOR SELECT USING (true);
+
+-- Permitir que usuários autenticados criem seus próprios posts
+CREATE POLICY "Usuários podem criar posts"
+  ON public.posts
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- Permitir que usuários deletem seus próprios posts
+CREATE POLICY "Usuários podem deletar próprios posts"
+  ON public.posts
+  FOR DELETE USING (auth.uid() = user_id);
+  
+-- 3. Storage Bucket para as mídias dos posts
+-- OBS: Se der erro de permissão no Storage via SQL, 
+-- crie o bucket 'posts' manualmente pelo painel e ative as políticas públicas de SELECT e autenticadas para INSERT.
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('posts', 'posts', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+-- ==========================================
+-- CORREÇÃO DE LEITURA DE MENSAGENS (RLS)
+-- Execute este script no SQL Editor do Supabase
+-- ==========================================
+
+-- Permite que usuários atualizem mensagens de suas conversas (para marcar como lidas)
+CREATE POLICY "Usuários podem atualizar mensagens em suas conversas" 
+ON public.messages 
+FOR UPDATE
+USING (
+  public.is_conversation_member(conversation_id)
+)
+WITH CHECK (
+  public.is_conversation_member(conversation_id)
+);
+-- Enable PostGIS extension for geolocation
+create extension if not exists postgis schema extensions;
+
+-- Create Users Table
+create table public.users (
+  id uuid references auth.users on delete cascade not null primary key,
+  email text unique not null,
+  name text,
+  dob date,
+  city text,
+  sex text,
+  photos text[] default '{}',
+  bio text,
+  
+  -- Trip info
+  destination text,
+  check_in date,
+  check_out date,
+  is_flexible boolean default false,
+  companions text,
+  
+  -- Preferences & Styles (Stored as Arrays/JSON)
+  travel_styles text[] default '{}',
+  interests text[] default '{}',
+  
+  -- Social & Budget
+  budget text,
+  cost_split boolean default false,
+  group_travel boolean default false,
+  one_person boolean default false,
+  invitations boolean default false,
+
+  -- Geolocations and Status
+  is_free boolean default false,
+  last_location geography(POINT),
+  
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Set up Row Level Security (RLS)
+alter table public.users enable row level security;
+
+create policy "Users can view all profiles"
+  on public.users for select
+  using ( true );
+
+create policy "Users can update own profile"
+  on public.users for update
+  using ( auth.uid() = id );
+
+create policy "Users can insert own profile"
+  on public.users for insert
+  with check ( auth.uid() = id );
+
+-- Function to handle new user signups
+create or replace function public.handle_new_user() 
+returns trigger as $$
+begin
+  insert into public.users (id, email, name, created_at)
+  values (new.id, new.email, new.raw_user_meta_data->>'full_name', now());
+  return new;
+end;
+$$ language plpgsql security definer;
+
+-- Trigger to automatically create profile on signup
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+-- 1. Cria o bucket 'avatars' caso ele não exista e define como público
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('avatars', 'avatars', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- 2. Garante que as políticas de segurança (RLS) estão ativadas para os arquivos
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+
+-- 3. Permite que QUALQUER PESSOA veja as fotos (Necessário para o Feed)
+CREATE POLICY "Fotos públicas" 
+ON storage.objects FOR SELECT 
+USING (bucket_id = 'avatars');
+
+-- 4. Permite que usuários logados façam UPLOAD de fotos
+CREATE POLICY "Upload de fotos" 
+ON storage.objects FOR INSERT 
+TO authenticated 
+WITH CHECK (bucket_id = 'avatars');
+
+-- 5. Permite que usuários logados atualizem/apaguem suas próprias fotos
+CREATE POLICY "Modificar fotos" 
+ON storage.objects FOR UPDATE 
+TO authenticated 
+USING (bucket_id = 'avatars' AND auth.uid() = owner);
+
+CREATE POLICY "Deletar fotos" 
+ON storage.objects FOR DELETE 
+TO authenticated 
+USING (bucket_id = 'avatars' AND auth.uid() = owner);
+-- Supabase Schema for Local Events
+-- Execute this script in your Supabase SQL Editor
+
+-- 1. Create local_events table
+CREATE TABLE IF NOT EXISTS public.local_events (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT,
+  latitude DOUBLE PRECISION NOT NULL,
+  longitude DOUBLE PRECISION NOT NULL,
+  location_name TEXT,
+  start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+  end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+  icon TEXT DEFAULT '📍',
+  is_public BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Enable RLS for local_events
+ALTER TABLE public.local_events ENABLE ROW LEVEL SECURITY;
+
+-- 2. Create event_requests table
+CREATE TABLE IF NOT EXISTS public.event_requests (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  event_id UUID REFERENCES public.local_events(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE(event_id, user_id)
+);
+
+-- Enable RLS for event_requests
+ALTER TABLE public.event_requests ENABLE ROW LEVEL SECURITY;
+
+-- 3. RLS Policies for local_events
+-- Anyone can read public events
+CREATE POLICY "Public events are viewable by everyone."
+  ON public.local_events FOR SELECT
+  USING (is_public = true);
+
+-- Users can read their own private events
+CREATE POLICY "Users can view their own private events."
+  ON public.local_events FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- Authenticated users can create events
+CREATE POLICY "Users can insert their own events."
+  ON public.local_events FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- Users can update their own events
+CREATE POLICY "Users can update their own events."
+  ON public.local_events FOR UPDATE
+  USING (auth.uid() = user_id);
+
+-- Users can delete their own events
+CREATE POLICY "Users can delete their own events."
+  ON public.local_events FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- 4. RLS Policies for event_requests
+-- Event creators can see requests for their events
+CREATE POLICY "Event creators can view requests for their events."
+  ON public.event_requests FOR SELECT
+  USING (
+    auth.uid() IN (
+      SELECT user_id FROM public.local_events WHERE id = event_id
+    )
+  );
+
+-- Users can see their own requests
+CREATE POLICY "Users can view their own requests."
+  ON public.event_requests FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- Authenticated users can request to join
+CREATE POLICY "Users can insert their own requests."
+  ON public.event_requests FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- Only event creators can update request status (accept/reject)
+CREATE POLICY "Only event creators can update request status."
+  ON public.event_requests FOR UPDATE
+  USING (
+    auth.uid() IN (
+      SELECT user_id FROM public.local_events WHERE id = event_id
+    )
+  );
+
+-- Users can delete their own requests (cancel request)
+CREATE POLICY "Users can delete their own requests."
+  ON public.event_requests FOR DELETE
+  USING (auth.uid() = user_id);
+
