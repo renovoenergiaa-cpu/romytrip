@@ -1,7 +1,11 @@
-import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
+
+// Só carrega o polyfill no nativo — no web, a URL API já existe nativamente
+if (Platform.OS !== 'web') {
+  require('react-native-url-polyfill/auto');
+}
 
 export const supabaseUrl =
   process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://ybolfnlilxygcoaupygp.supabase.co';

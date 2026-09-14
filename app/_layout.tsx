@@ -1,12 +1,44 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Component } from 'react';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Text, ScrollView } from 'react-native';
 import { colors } from '../src/theme';
 import { GlobalNotificationProvider } from '../src/context/GlobalNotificationContext';
 import { IncomingCallBanner } from '../src/components/IncomingCallBanner';
 import { InAppMessageBanner } from '../src/components/InAppMessageBanner';
+
+// Captura erros silenciosos e exibe a mensagem — essencial para depurar tela branca no web
+class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#0a0a0c', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Text style={{ color: '#EF4444', fontSize: 18, fontWeight: '700', marginBottom: 12 }}>
+            ⚠️ Erro no App
+          </Text>
+          <ScrollView style={{ maxHeight: 400 }}>
+            <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'monospace' }}>
+              {this.state.error?.message}
+            </Text>
+            <Text style={{ color: '#888', fontSize: 11, marginTop: 12, fontFamily: 'monospace' }}>
+              {this.state.error?.stack}
+            </Text>
+          </ScrollView>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { session, isLoading } = useAuth();
@@ -63,20 +95,22 @@ export default function RootLayout() {
   const [queryClient] = useState(() => new QueryClient());
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <GlobalNotificationProvider>
-          <AuthGuard>
-            <AppShell>
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                <Stack.Screen name="(modals)" options={{ presentation: 'modal', headerShown: false }} />
-              </Stack>
-            </AppShell>
-          </AuthGuard>
-        </GlobalNotificationProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <GlobalNotificationProvider>
+            <AuthGuard>
+              <AppShell>
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                  <Stack.Screen name="(modals)" options={{ presentation: 'modal', headerShown: false }} />
+                </Stack>
+              </AppShell>
+            </AuthGuard>
+          </GlobalNotificationProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
