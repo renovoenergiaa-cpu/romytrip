@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, Component } from 'react';
 import { AuthProvider } from '../src/context/AuthContext';
 import { View, Text, ScrollView } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '../src/theme';
 import { GlobalNotificationProvider } from '../src/context/GlobalNotificationContext';
 import { IncomingCallBanner } from '../src/components/IncomingCallBanner';
@@ -69,20 +70,22 @@ export default function RootLayout() {
 
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <GlobalNotificationProvider>
-            <AppShell>
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="index" options={{ headerShown: false }} />
-                <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                <Stack.Screen name="(modals)" options={{ presentation: 'modal', headerShown: false }} />
-              </Stack>
-            </AppShell>
-          </GlobalNotificationProvider>
-        </AuthProvider>
-      </QueryClientProvider>
+      <SafeAreaProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <GlobalNotificationProvider>
+              <AppShell>
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="index" options={{ headerShown: false }} />
+                  <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                  <Stack.Screen name="(modals)" options={{ presentation: 'modal', headerShown: false }} />
+                </Stack>
+              </AppShell>
+            </GlobalNotificationProvider>
+          </AuthProvider>
+        </QueryClientProvider>
+      </SafeAreaProvider>
     </ErrorBoundary>
   );
 }

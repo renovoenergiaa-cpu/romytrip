@@ -25,8 +25,10 @@ export default function TabLayout() {
     return <Redirect href="/(auth)/login" />;
   }
 
-  // iOS with home indicator needs ~83px total; Android stays at 60px
-  const tabBarHeight = Platform.OS === 'ios' ? 60 + insets.bottom : 60;
+  // iOS with home indicator needs bottom inset; works on both native and mobile Safari
+  const isIos = Platform.OS === 'ios' || (Platform.OS === 'web' && typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent));
+  const bottomPadding = insets.bottom > 0 ? insets.bottom : (isIos ? 20 : 8);
+  const tabBarHeight = 56 + bottomPadding;
 
   return (
     <Tabs
@@ -40,7 +42,7 @@ export default function TabLayout() {
           borderTopWidth: StyleSheet.hairlineWidth,
           elevation: 0,
           height: tabBarHeight,
-          paddingBottom: Platform.OS === 'ios' ? insets.bottom : 8,
+          paddingBottom: bottomPadding,
           paddingTop: 8,
         },
         tabBarBadgeStyle: {

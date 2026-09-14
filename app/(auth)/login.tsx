@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Image, ScrollView, SafeAreaView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
 import { useState } from 'react';
 import { supabase } from '../../src/lib/supabase';
@@ -114,99 +114,125 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Image 
-          source={require('../../assets/images/logo.png')} 
-          style={styles.logo} 
-          resizeMode="contain" 
-        />
-        <Text style={styles.title}>Bem-vindo de volta</Text>
-        <Text style={styles.subtitle}>Conecte-se com viajantes do mundo todo</Text>
-      </View>
-
-      <View style={styles.form}>
-        <CustomInput 
-          placeholder="Email" 
-          keyboardType="email-address" 
-          autoCapitalize="none"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <CustomInput 
-          placeholder="Senha" 
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
-        
-        <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={loading}>
-          <Text style={styles.primaryButtonText}>{loading ? 'Aguarde...' : 'Entrar'}</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.secondaryButton} onPress={handleSignup} disabled={loading}>
-          <Text style={styles.secondaryButtonText}>Criar conta</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.dividerContainer}>
-        <View style={styles.divider} />
-        <Text style={styles.dividerText}>ou</Text>
-        <View style={styles.divider} />
-      </View>
-
-      <View style={styles.socialContainer}>
-        <TouchableOpacity 
-          style={styles.socialButton} 
-          onPress={() => handleOAuthLogin('google')}
-          disabled={loading}
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent} 
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.socialButtonText}>Continuar com Google</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.socialButton} 
-          onPress={() => handleOAuthLogin('apple')}
-          disabled={loading}
-        >
-          <Text style={styles.socialButtonText}>Continuar com Apple</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+          <View style={styles.innerCard}>
+            <View style={styles.header}>
+              <Image 
+                source={require('../../assets/images/logo.png')} 
+                style={styles.logo} 
+                resizeMode="contain" 
+              />
+              <Text style={styles.title}>Bem-vindo de volta</Text>
+              <Text style={styles.subtitle}>Conecte-se com viajantes do mundo todo</Text>
+            </View>
+
+            <View style={styles.form}>
+              <CustomInput 
+                placeholder="Email" 
+                keyboardType="email-address" 
+                autoCapitalize="none"
+                value={email}
+                onChangeText={setEmail}
+              />
+              <CustomInput 
+                placeholder="Senha" 
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+              />
+              
+              <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={loading}>
+                <Text style={styles.primaryButtonText}>{loading ? 'Aguarde...' : 'Entrar'}</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.secondaryButton} onPress={handleSignup} disabled={loading}>
+                <Text style={styles.secondaryButtonText}>Criar conta</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.dividerContainer}>
+              <View style={styles.divider} />
+              <Text style={styles.dividerText}>ou</Text>
+              <View style={styles.divider} />
+            </View>
+
+            <View style={styles.socialContainer}>
+              <TouchableOpacity 
+                style={styles.socialButton} 
+                onPress={() => handleOAuthLogin('google')}
+                disabled={loading}
+              >
+                <Text style={styles.socialButtonText}>Continuar com Google</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.socialButton} 
+                onPress={() => handleOAuthLogin('apple')}
+                disabled={loading}
+              >
+                <Text style={styles.socialButtonText}>Continuar com Apple</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: colors.background,
-    padding: spacing.xl,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
+  },
+  innerCard: {
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
   },
   header: {
     alignItems: 'center',
-    marginBottom: spacing.xxl,
+    marginBottom: spacing.xl,
   },
   logo: {
-    width: 80,
-    height: 80,
-    marginBottom: spacing.lg,
+    width: 72,
+    height: 72,
+    marginBottom: spacing.md,
   },
   title: {
     ...typography.h1,
+    fontSize: 26,
     color: colors.textPrimary,
     marginBottom: spacing.xs,
+    textAlign: 'center',
   },
   subtitle: {
     ...typography.body,
+    fontSize: 14,
     color: colors.textSecondary,
+    textAlign: 'center',
   },
   form: {
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   primaryButton: {
     backgroundColor: colors.primary,
     borderRadius: 12,
-    height: 52,
+    height: 50,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: spacing.sm,
@@ -219,7 +245,7 @@ const styles = StyleSheet.create({
   secondaryButton: {
     backgroundColor: colors.inputBackground,
     borderRadius: 12,
-    height: 52,
+    height: 50,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: spacing.md,
@@ -232,7 +258,7 @@ const styles = StyleSheet.create({
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   divider: {
     flex: 1,
@@ -245,13 +271,13 @@ const styles = StyleSheet.create({
     ...typography.caption,
   },
   socialContainer: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   socialButton: {
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 12,
-    height: 52,
+    height: 50,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.surface,
@@ -262,3 +288,4 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
+
