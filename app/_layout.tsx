@@ -21,6 +21,9 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     }
   }, [session, isLoading, segments]);
 
+  // Nunca bloqueia a renderização com spinner — deixa o roteamento funcionar normalmente.
+  // No native, isLoading começa como true mas por max 800ms (controlado em AuthContext).
+  // No web, isLoading começa como false então nunca mostra o spinner.
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>

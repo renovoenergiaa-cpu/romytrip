@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
@@ -9,54 +10,57 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({
   session: null,
-  isLoading: true,
+  isLoading: false, // começa como false — web não bloqueia na inicialização
 });
 
 export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // No web, iniciamos sem loading para evitar travamento.
+  // No native (iOS/Android), iniciamos com loading para evitar flash de tela errada.
+  const [isLoading, setIsLoading] = useState(Platform.OS !== 'web');
 
   useEffect(() => {
     let isMounted = true;
 
-    // Timeout de segurança: se a sessão demorar mais de 1.2s, libera a tela de loading
-    const timer = setTimeout(() => {
-      if (isMounted) {
-        setIsLoading(false);
-      }
-    }, 1200);
+    // Timeout de segurança para native: garante máximo 800ms de loading
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    if (Platform.OS !== 'web') {
+      timer = setTimeout(() => {
+        if (isMounted) setIsLoading(false);
+      }, 800);
+    }
 
-    // Busca a sessão inicial com tratamento de erro
-    supabase.auth.getSession()
+    supabase.auth
+      .getSession()
       .then(({ data: { session } }) => {
         if (isMounted) {
           setSession(session);
           setIsLoading(false);
-          clearTimeout(timer);
+          if (timer) clearTimeout(timer);
         }
       })
-      .catch((err) => {
-        console.warn('Erro ao recuperar sessão:', err);
+      .catch(() => {
         if (isMounted) {
           setIsLoading(false);
-          clearTimeout(timer);
+          if (timer) clearTimeout(timer);
         }
       });
 
-    // Escuta mudanças de autenticação (login, logout, refresh token)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       if (isMounted) {
         setSession(session);
         setIsLoading(false);
-        clearTimeout(timer);
+        if (timer) clearTimeout(timer);
       }
     });
 
     return () => {
       isMounted = false;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       subscription.unsubscribe();
     };
   }, []);
