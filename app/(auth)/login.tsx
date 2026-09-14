@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Image } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { useRouter, Redirect } from 'expo-router';
+import { useState } from 'react';
 import { supabase } from '../../src/lib/supabase';
 import { useAuth } from '../../src/context/AuthContext';
 import { CustomInput } from '../../src/components/CustomInput';
@@ -18,12 +18,10 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [isSigningUp, setIsSigningUp] = useState(false);
 
-  // Safely redirect to tabs ONLY if we are not actively in the middle of signing up
-  useEffect(() => {
-    if (session && !isSigningUp) {
-      router.replace('/(tabs)');
-    }
-  }, [session, isSigningUp]);
+  // Redireciona declarativamente para tabs se já estiver autenticado
+  if (session && !isSigningUp) {
+    return <Redirect href="/(tabs)" />;
+  }
 
   const handleLogin = async () => {
     if (!email || !password) {

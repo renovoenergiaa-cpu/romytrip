@@ -1,17 +1,22 @@
-import { useEffect } from 'react';
-import { useRouter, useRootNavigationState } from 'expo-router';
-import { View } from 'react-native';
+import { Redirect } from 'expo-router';
+import { useAuth } from '../src/context/AuthContext';
+import { View, ActivityIndicator } from 'react-native';
+import { colors } from '../src/theme';
 
 export default function Index() {
-  const router = useRouter();
-  const navigationState = useRootNavigationState();
+  const { session, isLoading } = useAuth();
 
-  useEffect(() => {
-    // Só redireciona quando o navigator raiz estiver montado
-    if (!navigationState?.key) return;
-    router.replace('/(auth)/login');
-  }, [navigationState?.key]);
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
-  // Retorna vazio enquanto aguarda o navigator montar
-  return <View style={{ flex: 1, backgroundColor: '#000' }} />;
+  if (session) {
+    return <Redirect href="/(tabs)" />;
+  }
+
+  return <Redirect href="/(auth)/login" />;
 }

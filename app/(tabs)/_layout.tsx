@@ -1,15 +1,29 @@
-import { Tabs } from 'expo-router';
+import { Tabs, Redirect } from 'expo-router';
 import { Home, Users, MessageCircle, User, Plus } from 'lucide-react-native';
-import { StyleSheet, View, DeviceEventEmitter, Platform } from 'react-native';
+import { StyleSheet, View, DeviceEventEmitter, Platform, ActivityIndicator } from 'react-native';
 import { useTheme } from '../../src/theme';
 import { useConversations } from '../../src/hooks/useMessenger';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../../src/context/AuthContext';
 
 export default function TabLayout() {
+  const { session, isLoading } = useAuth();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { data: conversations } = useConversations();
   const unreadCount = conversations?.reduce((acc, curr) => acc + (curr.unread_count || 0), 0) || 0;
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!session) {
+    return <Redirect href="/(auth)/login" />;
+  }
 
   // iOS with home indicator needs ~83px total; Android stays at 60px
   const tabBarHeight = Platform.OS === 'ios' ? 60 + insets.bottom : 60;

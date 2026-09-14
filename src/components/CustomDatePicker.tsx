@@ -61,7 +61,29 @@ export function CustomDatePicker({ value, onChange, placeholder = "Selecionar da
         </Text>
       </TouchableOpacity>
 
-      {show && (
+      {Platform.OS === 'web' && show && (
+        <input
+          type="date"
+          style={{
+            marginTop: 8,
+            padding: 10,
+            borderRadius: 8,
+            backgroundColor: themeColors.inputBackground,
+            color: themeColors.textPrimary,
+            border: '1px solid ' + themeColors.border,
+            fontSize: 14,
+            outline: 'none',
+          }}
+          onChange={(e: any) => {
+            setShow(false);
+            if (e.target.value) {
+              onChange(new Date(e.target.value + 'T12:00:00').toISOString());
+            }
+          }}
+        />
+      )}
+
+      {Platform.OS !== 'web' && show && (
         <DateTimePicker
           value={pickerDate}
           mode="date"

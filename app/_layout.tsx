@@ -1,8 +1,8 @@
-import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState, useEffect, Component } from 'react';
-import { AuthProvider, useAuth } from '../src/context/AuthContext';
-import { View, ActivityIndicator, Text, ScrollView } from 'react-native';
+import { useState, Component } from 'react';
+import { AuthProvider } from '../src/context/AuthContext';
+import { View, Text, ScrollView } from 'react-native';
 import { colors } from '../src/theme';
 import { GlobalNotificationProvider } from '../src/context/GlobalNotificationContext';
 import { IncomingCallBanner } from '../src/components/IncomingCallBanner';
@@ -40,34 +40,6 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Er
 }
 
 
-function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { session, isLoading } = useAuth();
-  const segments = useSegments();
-  const router = useRouter();
-  // Aguarda o navigator raiz estar montado antes de qualquer navegação
-  const navigationState = useRootNavigationState();
-
-  useEffect(() => {
-    // Só redireciona quando o navigator estiver pronto E auth resolvido
-    if (!navigationState?.key) return;
-    if (isLoading) return;
-    const inAuthGroup = segments[0] === '(auth)';
-    if (!session && !inAuthGroup) {
-      router.replace('/(auth)/login');
-    }
-  }, [session, isLoading, segments, navigationState?.key]);
-
-  if (isLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
-  return <>{children}</>;
-}
-
 function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
@@ -100,15 +72,14 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <GlobalNotificationProvider>
-            <AuthGuard>
-              <AppShell>
-                <Stack screenOptions={{ headerShown: false }}>
-                  <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                  <Stack.Screen name="(modals)" options={{ presentation: 'modal', headerShown: false }} />
-                </Stack>
-              </AppShell>
-            </AuthGuard>
+            <AppShell>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="index" options={{ headerShown: false }} />
+                <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="(modals)" options={{ presentation: 'modal', headerShown: false }} />
+              </Stack>
+            </AppShell>
           </GlobalNotificationProvider>
         </AuthProvider>
       </QueryClientProvider>
