@@ -1,4 +1,4 @@
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, useEffect, Component } from 'react';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
@@ -44,18 +44,19 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const { session, isLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  // Aguarda o navigator raiz estar montado antes de qualquer navegação
+  const navigationState = useRootNavigationState();
 
   useEffect(() => {
+    // Só redireciona quando o navigator estiver pronto E auth resolvido
+    if (!navigationState?.key) return;
     if (isLoading) return;
     const inAuthGroup = segments[0] === '(auth)';
     if (!session && !inAuthGroup) {
       router.replace('/(auth)/login');
     }
-  }, [session, isLoading, segments]);
+  }, [session, isLoading, segments, navigationState?.key]);
 
-  // Nunca bloqueia a renderização com spinner — deixa o roteamento funcionar normalmente.
-  // No native, isLoading começa como true mas por max 800ms (controlado em AuthContext).
-  // No web, isLoading começa como false então nunca mostra o spinner.
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
