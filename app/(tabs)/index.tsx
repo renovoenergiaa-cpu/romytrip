@@ -17,7 +17,7 @@ import { EmptyState } from '../../src/components/EmptyState';
 
 import { useRouter } from 'expo-router';
 
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import RomyMap from '../../src/components/RomyMap';
 import { useRef } from 'react';
 import { supabase } from '../../src/lib/supabase';
 import { useLocalEvents } from '../../src/hooks/useEvents';
@@ -38,40 +38,6 @@ interface ITunesSong {
   previewUrl: string;
   artworkUrl60: string;
 }
-
-
-// Event Marker Component to fix Android clipping bug
-const EventMarker = ({ event, onPress }: { event: any, onPress: () => void }) => {
-  const [tracksViewChanges, setTracksViewChanges] = useState(true);
-  
-  useEffect(() => {
-    // Android map rendering often clips complex views if tracked continuously.
-    // Disabling tracking after the initial layout pass takes a perfect snapshot.
-    const timer = setTimeout(() => setTracksViewChanges(false), 500);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const iconObj = AVAILABLE_EVENT_ICONS.find(i => i.id === event.icon);
-  const IconComp = iconObj?.component;
-
-  return (
-    <Marker
-      coordinate={{ latitude: event.latitude, longitude: event.longitude }}
-      onPress={onPress}
-      tracksViewChanges={tracksViewChanges}
-    >
-      <View style={{ width: 48, height: 48, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ position: 'absolute', fontSize: 56, color: colors.primary, textAlign: 'center', includeFontPadding: false }}>●</Text>
-        <Text style={{ position: 'absolute', fontSize: 48, color: '#FFF', textAlign: 'center', includeFontPadding: false }}>●</Text>
-        {IconComp ? (
-          <IconComp size={22} color={colors.primary} />
-        ) : (
-          <Text style={styles.markerIcon}>{event.icon}</Text>
-        )}
-      </View>
-    </Marker>
-  );
-};
 
 export default function RomyFeedScreen() {
   const router = useRouter();
@@ -725,13 +691,12 @@ export default function RomyFeedScreen() {
         <View style={[styles.mapContainer, { paddingTop: NAV_BAR_HEIGHT }]}>
           {mapRegion ? (
             <View style={{ flex: 1 }}>
-              <MapView 
+              <RomyMap 
                 ref={mapRef}
                 style={styles.map}
-                initialRegion={mapRegion}
-                showsUserLocation={true}
+                mapRegion={mapRegion}
                 onLongPress={handleLongPressMap}
-                onRegionChangeComplete={async (region) => {
+                onRegionChangeComplete={async (region: any) => {
                   if (isDraftingEvent) {
                     setDraftEventLocation({ latitude: region.latitude, longitude: region.longitude });
                     setDraftLocationName('Buscando local...');
@@ -759,18 +724,12 @@ export default function RomyFeedScreen() {
                     }
                   }
                 }}
-              >
-                {localEvents?.map((event: any) => (
-                  <EventMarker 
-                    key={event.id}
-                    event={event}
-                    onPress={() => {
-                      setSelectedEvent(event);
-                      setEventDetailsVisible(true);
-                    }}
-                  />
-                ))}
-              </MapView>
+                localEvents={localEvents}
+                onSelectEvent={(event: any) => {
+                  setSelectedEvent(event);
+                  setEventDetailsVisible(true);
+                }}
+              />
               {isDraftingEvent && (
                 <View style={styles.fixedPinContainer} pointerEvents="none">
                   <View style={styles.draftTooltip}>
