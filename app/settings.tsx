@@ -11,57 +11,87 @@ export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
   const { themeMode, setThemeMode } = useThemeStore();
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Sair da Conta',
-      'Tem certeza que deseja encerrar a sua sessão?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Sair da Conta',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase.auth.signOut();
-              if (error) throw error;
-              router.replace('/(auth)/login');
-            } catch (error) {
-              Alert.alert('Erro', 'Não foi possível sair da conta.');
-            }
+  const handleLogout = async () => {
+    const doLogout = async () => {
+      try {
+        await supabase.auth.signOut();
+      } catch (error) {
+        console.warn('Erro ao sair do Supabase:', error);
+      } finally {
+        router.replace('/(auth)/login');
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined' ? window.confirm('Tem certeza que deseja encerrar a sua sessão?') : true;
+      if (confirmed) {
+        await doLogout();
+      }
+    } else {
+      Alert.alert(
+        'Sair da Conta',
+        'Tem certeza que deseja encerrar a sua sessão?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Sair da Conta',
+            style: 'destructive',
+            onPress: doLogout,
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
-      'Excluir Conta',
-      'Esta ação é irreversível. Todos os seus dados de perfil, mensagens e conexões serão apagados permanentemente. Deseja prosseguir?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Excluir Minha Conta',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { data: { user } } = await supabase.auth.getUser();
-              if (user) {
-                // Remove perfil público
-                await supabase.from('users').delete().eq('id', user.id);
-                // Remove o Auth real chamando a function que o usuário vai criar no Supabase
-                await supabase.rpc('delete_user');
-              }
-              await supabase.auth.signOut();
-              Alert.alert('Conta Excluída', 'Sua conta foi excluída com sucesso.');
-              router.replace('/(auth)/login');
-            } catch (error: any) {
-              Alert.alert('Erro', error.message || 'Não foi possível excluir sua conta no momento.');
-            }
+    const doDelete = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          // Remove perfil público
+          await supabase.from('users').delete().eq('id', user.id);
+          // Remove o Auth real chamando a function no Supabase
+          try {
+            await supabase.rpc('delete_user');
+          } catch {}
+        }
+        await supabase.auth.signOut();
+        if (Platform.OS === 'web') {
+          if (typeof window !== 'undefined') window.alert('Sua conta foi excluída com sucesso.');
+        } else {
+          Alert.alert('Conta Excluída', 'Sua conta foi excluída com sucesso.');
+        }
+        router.replace('/(auth)/login');
+      } catch (error: any) {
+        const errorMsg = error.message || 'Não foi possível excluir sua conta no momento.';
+        if (Platform.OS === 'web') {
+          if (typeof window !== 'undefined') window.alert('Erro: ' + errorMsg);
+        } else {
+          Alert.alert('Erro', errorMsg);
+        }
+      }
+    };
+
+    const confirmMessage = 'Esta ação é irreversível. Todos os seus dados de perfil, mensagens e conexões serão apagados permanentemente. Deseja prosseguir?';
+    if (Platform.OS === 'web') {
+      const confirmed = typeof window !== 'undefined' ? window.confirm(confirmMessage) : true;
+      if (confirmed) {
+        doDelete();
+      }
+    } else {
+      Alert.alert(
+        'Excluir Conta',
+        confirmMessage,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Excluir Minha Conta',
+            style: 'destructive',
+            onPress: doDelete,
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const renderThemeButton = (mode: ThemeMode, label: string, Icon: any) => {

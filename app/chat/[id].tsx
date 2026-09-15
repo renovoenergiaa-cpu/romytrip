@@ -1027,30 +1027,41 @@ export default function ChatDetailScreen() {
   };
 
   const handleDeleteOrLeave = () => {
-    Alert.alert(
-      isGroup ? 'Sair do Grupo' : 'Excluir Conversa',
-      isGroup 
-        ? 'Tem certeza que deseja sair deste grupo?' 
-        : 'Tem certeza que deseja excluir esta conversa?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: isGroup ? 'Sair' : 'Excluir', 
-          style: 'destructive', 
-          onPress: () => {
-            if (isGroup) {
-              leaveChat({ conversationId: id as string }, {
-                onSuccess: () => router.replace('/(tabs)/chat')
-              });
-            } else {
-              deleteChat({ conversationId: id as string }, {
-                onSuccess: () => router.replace('/(tabs)/chat')
-              });
-            }
+    const title = isGroup ? 'Sair do Grupo' : 'Excluir Conversa';
+    const message = isGroup 
+      ? 'Tem certeza que deseja sair deste grupo?' 
+      : 'Tem certeza que deseja excluir esta conversa?';
+
+    const executeAction = () => {
+      if (isGroup) {
+        leaveChat({ conversationId: id as string }, {
+          onSuccess: () => router.replace('/(tabs)/chat')
+        });
+      } else {
+        deleteChat({ conversationId: id as string }, {
+          onSuccess: () => router.replace('/(tabs)/chat')
+        });
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm(message)) {
+        executeAction();
+      }
+    } else {
+      Alert.alert(
+        title,
+        message,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { 
+            text: isGroup ? 'Sair' : 'Excluir', 
+            style: 'destructive', 
+            onPress: executeAction
           }
-        }
-      ]
-    );
+        ]
+      );
+    }
   };
 
   return (

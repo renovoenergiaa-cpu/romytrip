@@ -8,6 +8,7 @@ export default function OnboardingLayout() {
       <Stack.Screen name="step3-travelstyle" />
       <Stack.Screen name="step4-interests" />
       <Stack.Screen name="step5-social" />
+      <Stack.Screen name="step6-connections" />
     </Stack>
   );
 }

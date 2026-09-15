@@ -1,4 +1,4 @@
-import { View, StyleSheet, ScrollView, TouchableOpacity, Text, Alert, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Text, Alert, ActivityIndicator, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Square, CheckSquare, Sparkles } from 'lucide-react-native';
 import { useState } from 'react';
@@ -32,7 +32,12 @@ export default function Step6ConnectionsScreen() {
 
   const handleFinish = async () => {
     if (state.connectionIntentions.length === 0 || !state.genderPreference) {
-      Alert.alert('Aviso', 'Por favor, selecione pelo menos uma intenção de conexão e a sua preferência de gênero.');
+      const msg = 'Por favor, selecione pelo menos uma intenção de conexão e a sua preferência de gênero.';
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined') window.alert(msg);
+      } else {
+        Alert.alert('Aviso', msg);
+      }
       return;
     }
     setLoading(true);
@@ -41,7 +46,12 @@ export default function Step6ConnectionsScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     
     if (!user) {
-      Alert.alert('Erro', 'Usuário não autenticado.');
+      const msg = 'Usuário não autenticado.';
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined') window.alert(msg);
+      } else {
+        Alert.alert('Erro', msg);
+      }
       setLoading(false);
       return;
     }
@@ -63,45 +73,57 @@ export default function Step6ConnectionsScreen() {
         for (let i = 0; i < state.photos.length; i++) {
           const uri = state.photos[i];
           if (uri && !uri.startsWith('http')) {
-            // Upload local file to Supabase Storage using base64 ArrayBuffer
             const cleanUri = uri.split('?')[0];
             const ext = cleanUri.substring(cleanUri.lastIndexOf('.') + 1).toLowerCase() || 'jpg';
             const fileName = `${user.id}/${Date.now()}_${i}.${ext}`;
             
-            const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+            try {
+              let fileBody: any = null;
+              if (Platform.OS === 'web') {
+                const res = await fetch(uri);
+                fileBody = await res.blob();
+              } else {
+                const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+                fileBody = decode(base64);
+              }
 
-            const { data, error: uploadError } = await supabase.storage
-              .from('avatars')
-              .upload(fileName, decode(base64), {
-                contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
-                upsert: true
-              });
+              const { data, error: uploadError } = await supabase.storage
+                .from('avatars')
+                .upload(fileName, fileBody, {
+                  contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+                  upsert: true
+                });
 
-            if (uploadError) {
-              console.error('Error uploading image:', uploadError);
-            } else {
-              // Get public URL
-              const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
-              finalPhotos.push(publicUrlData.publicUrl);
+              if (uploadError) {
+                console.warn('Upload image failed (storage bucket might need creation):', uploadError);
+                finalPhotos.push(uri);
+              } else {
+                const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
+                finalPhotos.push(publicUrlData.publicUrl);
+              }
+            } catch (singleErr) {
+              console.warn('Single image upload exception:', singleErr);
+              finalPhotos.push(uri);
             }
           } else if (uri) {
-            // Already a remote URL
             finalPhotos.push(uri);
           }
         }
       } catch (err) {
-        console.error('Image upload failed:', err);
+        console.warn('Image processing warning:', err);
       }
     }
 
-    // Prepare data to update in Supabase
+    // Prepare data to upsert in Supabase
     const updateData = {
+      id: user.id,
+      email: user.email,
       name: state.name,
       dob: parsedDob,
       city: state.city,
       sex: state.sex,
       bio: state.bio,
-      photos: finalPhotos.length > 0 ? finalPhotos : undefined, // Update photos if any
+      photos: finalPhotos.length > 0 ? finalPhotos : undefined,
       
       destination: state.destination,
       is_flexible: state.isFlexible,
@@ -122,14 +144,17 @@ export default function Step6ConnectionsScreen() {
 
     const { error } = await supabase
       .from('users')
-      .update(updateData)
-      .eq('id', user.id);
+      .upsert(updateData);
 
     if (error) {
-      Alert.alert('Erro', 'Falha ao salvar seu perfil: ' + error.message);
+      const msg = 'Falha ao salvar seu perfil: ' + error.message;
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined') window.alert(msg);
+      } else {
+        Alert.alert('Erro', msg);
+      }
       setLoading(false);
     } else {
-      console.log('Finalizado com sucesso!', updateData);
       state.reset(); // Clear onboarding state
       router.replace('/(tabs)');
     }
