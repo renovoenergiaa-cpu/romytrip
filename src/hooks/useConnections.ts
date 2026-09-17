@@ -7,9 +7,18 @@ export function useUserProfile(userId: string) {
   return useQuery({
     queryKey: ['userProfile', userId],
     queryFn: async () => {
+      // 🔒 N-02 Fix: Never use SELECT * on users table — it bypasses column-level security
+      // and can expose email, push_token, and GPS coordinates.
       const { data, error } = await supabase
         .from('users')
-        .select('*')
+        .select(`
+          id, name, city, sex, photos, bio, destination,
+          check_in, check_out, is_flexible, companions,
+          travel_styles, interests, budget, cost_split,
+          group_travel, one_person, invitations, is_free,
+          created_at, updated_at, connection_intentions,
+          gender_preference, privacy_settings
+        `)
         .eq('id', userId)
         .single();
 
@@ -135,17 +144,27 @@ export function useRespondConnection() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Fetch connection details before updating (to get sender_id)
-      const { data: connData } = await supabase
+      // 🔒 N-08 Fix: Verify the current user is actually the receiver before responding.
+      // Without this check, the protection relies solely on the RLS policy.
+      const { data: connCheck, error: checkErr } = await supabase
         .from('connections')
-        .select('sender_id')
+        .select('sender_id, receiver_id')
         .eq('id', connectionId)
         .single();
+
+      if (checkErr || !connCheck) throw new Error('Conexão não encontrada.');
+      if (connCheck.receiver_id !== user.id) {
+        throw new Error('Você não tem permissão para responder esta solicitação.');
+      }
+
+      // Fetch connection details before updating (to get sender_id)
+      const connData = connCheck;
 
       const { data, error } = await supabase
         .from('connections')
         .update({ status })
-        .eq('id', connectionId);
+        .eq('id', connectionId)
+        .eq('receiver_id', user.id); // 🔒 N-08: Double-lock with DB filter
 
       if (error) throw error;
       return { data, status, senderId: connData?.sender_id, responderId: user.id };
@@ -253,17 +272,24 @@ export function useDiscoveryTravelers(filters: DiscoveryFilters = { gender: 'Tod
 
       // 2. Fetch all users not in the excluded list
       const excludedArray = Array.from(excludedIds);
+      // 🔒 N-02 Fix: Explicit column list instead of SELECT *
       const { data, error } = await supabase
         .from('users')
-        .select('*')
+        .select(`
+          id, name, city, sex, photos, bio, destination,
+          check_in, check_out, travel_styles, interests,
+          budget, is_free, created_at, connection_intentions,
+          gender_preference, privacy_settings, dob
+        `)
         .not('id', 'in', `(${excludedArray.join(',')})`)
         .limit(30);
 
       if (error) throw error;
-      let users = data || [];
+      let users: any[] = (data as any[]) || [];
 
-      // ADICIONANDO USUÁRIOS DE EXEMPLO SE A LISTA FOR PEQUENA
-      if (users.length < 5) {
+      // 🔒 N-04 Fix: Mock users only in DEV. In production, hardcoded IDs and unlicensed
+      // Unsplash photos must never be shown to real users.
+      if (__DEV__ && users.length < 5) {
         users.unshift({
           id: 'mock-thadeu',
           name: 'Thadeu Zan',

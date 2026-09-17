@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, MapPin, BadgeCheck, Sparkles } from 'lucide-react-native';
+import { ArrowLeft, MapPin, BadgeCheck, Sparkles, UserX } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUserProfile, useConnectionStatus, useRequestConnection } from '../../src/hooks/useConnections';
 import { useStartConversation } from '../../src/hooks/useMessenger';
@@ -30,10 +30,48 @@ export default function PublicProfileScreen() {
     );
   }
 
-  if (!profile) {
+  const isDeleted = !profile || profile.name === 'Conta Excluída' || profile.name === 'Usuário Romy';
+
+  if (isDeleted) {
     return (
-      <View style={[containerStyle, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={{ color: colors.textPrimary }}>Usuário não encontrado.</Text>
+      <View style={[containerStyle, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+        <UserX size={56} color={colors.textMuted} style={{ marginBottom: 16 }} />
+        <Text style={{ ...typography.h2, color: colors.textPrimary, marginBottom: 8, textAlign: 'center' }}>
+          Conta não disponível
+        </Text>
+        <Text style={{ ...typography.body, color: colors.textMuted, textAlign: 'center', marginBottom: 24, maxWidth: 300 }}>
+          Este perfil não está mais disponível porque o usuário excluiu sua conta do Romy.
+        </Text>
+        <TouchableOpacity 
+          style={{ backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24 }}
+          onPress={() => router.back()}
+        >
+          <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Voltar</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // 🔒 VULN-10 Fix: Respect privacy_settings (publicProfile)
+  const isSelf = connection?.status === 'self';
+  const isPrivateProfile = profile.privacy_settings?.publicProfile === false && !isSelf && connection?.status !== 'accepted';
+
+  if (isPrivateProfile) {
+    return (
+      <View style={[containerStyle, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+        <UserX size={56} color={colors.textMuted} style={{ marginBottom: 16 }} />
+        <Text style={{ ...typography.h2, color: colors.textPrimary, marginBottom: 8, textAlign: 'center' }}>
+          Perfil Privado
+        </Text>
+        <Text style={{ ...typography.body, color: colors.textMuted, textAlign: 'center', marginBottom: 24, maxWidth: 300 }}>
+          Este viajante optou por manter o perfil visível apenas para conexões aceitas.
+        </Text>
+        <TouchableOpacity 
+          style={{ backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 24 }}
+          onPress={() => router.back()}
+        >
+          <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Voltar</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -97,10 +135,12 @@ export default function PublicProfileScreen() {
               <BadgeCheck size={28} color={colors.primary} fill="#FFF" style={{ marginLeft: 8 }} />
             </View>
             
-            <View style={styles.infoRow}>
-              <MapPin size={18} color={colors.surface} />
-              <Text style={styles.infoText}>{profile.city || 'Local Desconhecido'}</Text>
-            </View>
+            {profile.privacy_settings?.showLocation !== false && (
+              <View style={styles.infoRow}>
+                <MapPin size={18} color={colors.surface} />
+                <Text style={styles.infoText}>{profile.city || 'Local Desconhecido'}</Text>
+              </View>
+            )}
           </LinearGradient>
         </View>
 

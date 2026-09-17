@@ -37,7 +37,9 @@ import {
   CameraOff, 
   RefreshCw,
   Volume2,
-  Sparkles
+  Sparkles,
+  User,
+  Lock
 } from 'lucide-react-native';
 import { useState, useRef, useEffect } from 'react';
 import { useGlobalNotification } from '../../src/context/GlobalNotificationContext';
@@ -200,7 +202,7 @@ export default function ChatDetailScreen() {
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data } = await supabase.from('users').select('*').eq('id', user.id).single();
+      const { data } = await supabase.from('users').select('id, name, photos').eq('id', user.id).single();
       return data;
     },
   });
@@ -211,10 +213,22 @@ export default function ChatDetailScreen() {
   const isArchived = conversation?.is_archived;
   const isMuted = conversation?.is_muted;
 
+  const isDeletedAccount = !isGroup && (
+    conversation?.other_participant?.name === 'Conta Excluída' ||
+    conversation?.other_participant?.name === 'Usuário Romy' ||
+    name === 'Conta Excluída' ||
+    name === 'Usuário Romy' ||
+    (conversation && !conversation.is_group && !conversation.other_participant)
+  );
+
   const myPhoto = myProfile?.photos?.[0] || defaultAvatar;
   const myName = myProfile?.name || 'Você';
-  const recipientName = (name as string) || conversation?.other_participant?.name || 'Viajante';
-  const recipientPhoto = conversation?.other_participant?.photos?.[0] || defaultAvatar;
+  const recipientName = isDeletedAccount 
+    ? 'Conta Excluída' 
+    : ((name as string) || conversation?.other_participant?.name || 'Viajante');
+  const recipientPhoto = isDeletedAccount 
+    ? null 
+    : (conversation?.other_participant?.photos?.[0] || defaultAvatar);
 
   if (conversation?.other_participant?.id) {
     recipientIdRef.current = conversation.other_participant.id;
@@ -1072,16 +1086,38 @@ export default function ChatDetailScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <ChevronLeft size={28} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { flex: 1 }]} numberOfLines={1}>{recipientName}</Text>
+          <View style={{ width: 36, height: 36, borderRadius: 18, overflow: 'hidden', marginRight: 10 }}>
+            {isDeletedAccount ? (
+              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? '#334155' : '#E2E8F0', justifyContent: 'center', alignItems: 'center' }}>
+                <User size={20} color={isDark ? '#94A3B8' : '#64748B'} />
+              </View>
+            ) : recipientPhoto ? (
+              <Image source={{ uri: recipientPhoto }} style={{ width: 36, height: 36, borderRadius: 18 }} />
+            ) : (
+              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' }}>
+                <User size={20} color="#FFF" />
+              </View>
+            )}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle} numberOfLines={1}>{recipientName}</Text>
+            {isDeletedAccount && (
+              <Text style={{ fontSize: 11, color: colors.textMuted }}>Indisponível</Text>
+            )}
+          </View>
         </View>
         
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.headerIcon} onPress={() => initiateCall('voice')}>
-            <Phone size={20} color={colors.primary} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerIcon} onPress={() => initiateCall('video')}>
-            <VideoIcon size={20} color={colors.primary} />
-          </TouchableOpacity>
+          {!isDeletedAccount && (
+            <>
+              <TouchableOpacity style={styles.headerIcon} onPress={() => initiateCall('voice')}>
+                <Phone size={20} color={colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.headerIcon} onPress={() => initiateCall('video')}>
+                <VideoIcon size={20} color={colors.primary} />
+              </TouchableOpacity>
+            </>
+          )}
           <TouchableOpacity style={styles.headerIcon} onPress={() => setIsSettingsVisible(true)}>
             <MoreVertical size={20} color={colors.textPrimary} />
           </TouchableOpacity>
@@ -1191,52 +1227,61 @@ export default function ChatDetailScreen() {
 
       {/* Input Bar */}
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <View style={styles.inputContainer}>
-          {isRecording ? (
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.sm }}>
-              <TouchableOpacity onPress={cancelRecording} style={{ padding: 10 }}>
-                <Trash2 size={24} color="#EF4444" />
-              </TouchableOpacity>
-              
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#EF4444', marginRight: 8, opacity: recordingDuration % 2 === 0 ? 1 : 0.5 }} />
-                <Text style={{ ...typography.body, color: colors.textPrimary }}>
-                  {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
-                </Text>
-              </View>
-              
-              <TouchableOpacity onPress={sendRecording} style={styles.sendButton} disabled={isSending}>
-                {isSending ? <ActivityIndicator size="small" color="#FFF" /> : <Send size={20} color="#FFF" />}
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              <TouchableOpacity onPress={handlePickMedia} style={styles.attachButton}>
-                <ImageIcon size={22} color={colors.textSecondary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleTakePhoto} style={styles.attachButton}>
-                <Camera size={22} color={colors.textSecondary} />
-              </TouchableOpacity>
-              <TextInput 
-                style={styles.textInput} 
-                placeholder="Digite sua mensagem..."
-                placeholderTextColor={colors.textMuted}
-                value={messageText}
-                onChangeText={setMessageText}
-                onSubmitEditing={handleSendText}
-              />
-              {messageText.trim().length > 0 ? (
-                <TouchableOpacity style={styles.sendButton} onPress={handleSendText} disabled={isSending}>
+        {isDeletedAccount ? (
+          <View style={[styles.deletedNoticeBar, { backgroundColor: isDark ? '#1E293B' : '#F8FAFC', borderTopColor: colors.border }]}>
+            <Lock size={16} color={colors.textMuted} style={{ marginRight: 8 }} />
+            <Text style={[styles.deletedNoticeText, { color: colors.textMuted }]}>
+              Esta conta foi excluída. Não é possível responder a esta conversa.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.inputContainer}>
+            {isRecording ? (
+              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.sm }}>
+                <TouchableOpacity onPress={cancelRecording} style={{ padding: 10 }}>
+                  <Trash2 size={24} color="#EF4444" />
+                </TouchableOpacity>
+                
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#EF4444', marginRight: 8, opacity: recordingDuration % 2 === 0 ? 1 : 0.5 }} />
+                  <Text style={{ ...typography.body, color: colors.textPrimary }}>
+                    {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+                  </Text>
+                </View>
+                
+                <TouchableOpacity onPress={sendRecording} style={styles.sendButton} disabled={isSending}>
                   {isSending ? <ActivityIndicator size="small" color="#FFF" /> : <Send size={20} color="#FFF" />}
                 </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={styles.micButton} onPress={startRecording}>
-                  <Mic size={22} color="#FFF" />
+              </View>
+            ) : (
+              <>
+                <TouchableOpacity onPress={handlePickMedia} style={styles.attachButton}>
+                  <ImageIcon size={22} color={colors.textSecondary} />
                 </TouchableOpacity>
-              )}
-            </>
-          )}
-        </View>
+                <TouchableOpacity onPress={handleTakePhoto} style={styles.attachButton}>
+                  <Camera size={22} color={colors.textSecondary} />
+                </TouchableOpacity>
+                <TextInput 
+                  style={styles.textInput} 
+                  placeholder="Digite sua mensagem..."
+                  placeholderTextColor={colors.textMuted}
+                  value={messageText}
+                  onChangeText={setMessageText}
+                  onSubmitEditing={handleSendText}
+                />
+                {messageText.trim().length > 0 ? (
+                  <TouchableOpacity style={styles.sendButton} onPress={handleSendText} disabled={isSending}>
+                    {isSending ? <ActivityIndicator size="small" color="#FFF" /> : <Send size={20} color="#FFF" />}
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity style={styles.micButton} onPress={startRecording}>
+                    <Mic size={22} color="#FFF" />
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+          </View>
+        )}
       </KeyboardAvoidingView>
 
       {/* Call Screen Modal */}
@@ -1761,6 +1806,19 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     marginTop: 2,
+    textAlign: 'center',
+  },
+  deletedNoticeBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: spacing.lg,
+    borderTopWidth: 1,
+  },
+  deletedNoticeText: {
+    fontSize: 13,
+    fontWeight: '500',
     textAlign: 'center',
   },
 });

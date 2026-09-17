@@ -4,9 +4,9 @@ import { View, ActivityIndicator } from 'react-native';
 import { colors } from '../src/theme';
 
 export default function Index() {
-  const { session, isLoading } = useAuth();
+  const { session, isLoading, isProfileComplete } = useAuth();
 
-  if (isLoading) {
+  if (isLoading || (session && isProfileComplete === null)) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -14,9 +14,14 @@ export default function Index() {
     );
   }
 
-  if (session) {
-    return <Redirect href="/(tabs)" />;
+  if (!session) {
+    return <Redirect href="/(auth)/login" />;
   }
 
-  return <Redirect href="/(auth)/login" />;
+  if (isProfileComplete === false) {
+    return <Redirect href="/(auth)/onboarding/step1-personal" />;
+  }
+
+  return <Redirect href="/(tabs)" />;
 }
+

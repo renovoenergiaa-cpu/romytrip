@@ -27,11 +27,15 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Er
           </Text>
           <ScrollView style={{ maxHeight: 400 }}>
             <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'monospace' }}>
-              {this.state.error?.message}
+              {/* 🔒 SECURITY: Only expose error details in development */}
+              {__DEV__ ? this.state.error?.message : 'Ocorreu um erro inesperado. Por favor, reinicie o aplicativo.'}
             </Text>
-            <Text style={{ color: '#888', fontSize: 11, marginTop: 12, fontFamily: 'monospace' }}>
-              {this.state.error?.stack}
-            </Text>
+            {/* Stack trace: only visible in dev builds, never in production */}
+            {__DEV__ && (
+              <Text style={{ color: '#888', fontSize: 11, marginTop: 12, fontFamily: 'monospace' }}>
+                {this.state.error?.stack}
+              </Text>
+            )}
           </ScrollView>
         </View>
       );

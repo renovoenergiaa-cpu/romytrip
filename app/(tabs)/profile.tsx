@@ -50,7 +50,14 @@ export default function ProfileScreen() {
 
       const { data, error } = await supabase
         .from('users')
-        .select('*')
+        .select(`
+          id, name, city, sex, photos, bio, destination,
+          check_in, check_out, is_flexible, companions,
+          travel_styles, interests, budget, cost_split,
+          group_travel, one_person, invitations, is_free,
+          created_at, updated_at, connection_intentions,
+          gender_preference, privacy_settings, dob, plan
+        `)
         .eq('id', user.id)
         .single();
 
@@ -63,21 +70,22 @@ export default function ProfileScreen() {
     'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80';
   const avatarUrl = profile?.photos?.[0] || defaultAvatar;
 
-  const name = String(profile?.name || 'Thadeu');
-  const city = String(profile?.city ? `${profile.city}, Brasil` : 'Cabo Frio, Rio de Janeiro, Brasil');
-  const bio = String(profile?.bio || 'Boraaa');
+  const p = (profile as any) || {};
+  const name = String(p.name || 'Thadeu');
+  const city = String(p.city ? `${p.city}, Brasil` : 'Cabo Frio, Rio de Janeiro, Brasil');
+  const bio = String(p.bio || 'Boraaa');
   const objective = String(
-    profile?.connection_intentions?.[0] ||
-    profile?.connection_objective ||
+    p.connection_intentions?.[0] ||
+    p.connection_objective ||
     'Conhecer pessoas para explorar a cidade, tomar café, fazer trilhas e trocar experiências.'
   );
-  const destination = String(profile?.destination || 'Em casa');
+  const destination = String(p.destination || 'Em casa');
 
   const rawInterests =
-    Array.isArray(profile?.travel_styles) && profile.travel_styles.length > 0
-      ? profile.travel_styles
-      : Array.isArray(profile?.common_interests) && profile.common_interests.length > 0
-      ? profile.common_interests
+    Array.isArray(p.travel_styles) && p.travel_styles.length > 0
+      ? p.travel_styles
+      : Array.isArray(p.common_interests) && p.common_interests.length > 0
+      ? p.common_interests
       : ['Café', 'Trilhas', 'Praia', 'Fotografia', 'Música'];
 
   const interests = rawInterests
@@ -85,17 +93,17 @@ export default function ProfileScreen() {
     .filter((s: string) => s.length > 0);
 
   const rawLanguages =
-    Array.isArray(profile?.interests) && profile.interests.length > 0
-      ? profile.interests
-      : Array.isArray(profile?.languages) && profile.languages.length > 0
-      ? profile.languages
+    Array.isArray(p.interests) && p.interests.length > 0
+      ? p.interests
+      : Array.isArray(p.languages) && p.languages.length > 0
+      ? p.languages
       : ['Português', 'Inglês'];
 
   const languages = rawLanguages
     .map((item: any) => (typeof item === 'string' ? item : item?.label || item?.name || ''))
     .filter((s: string) => s.length > 0);
 
-  const availability = String(profile?.companions || profile?.availability || 'Fins de semana e noites durante a semana.');
+  const availability = String(p.companions || p.availability || 'Fins de semana e noites durante a semana.');
 
   if (isLoading) {
     return (
@@ -151,6 +159,34 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Banner de Novas Regras de Sintonia e Segurança da Mulher */}
+        <TouchableOpacity
+          activeOpacity={0.88}
+          style={styles.safetyUpdateBanner}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            router.push('/(auth)/onboarding/step1-personal');
+          }}
+        >
+          <LinearGradient
+            colors={['#4F46E5', '#7C3AED']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.safetyUpdateGradient}
+          >
+            <View style={styles.safetyUpdateIcon}>
+              <Sparkles size={18} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.safetyUpdateTitle}>Novas Regras de Sintonia & Segurança</Text>
+              <Text style={styles.safetyUpdateSubtitle}>
+                Atualize seu perfil para definir suas preferências de segurança e estilo de viagem.
+              </Text>
+            </View>
+            <ChevronRight size={18} color="#FFFFFF" />
+          </LinearGradient>
+        </TouchableOpacity>
+
         {/* 1. Identity Surface Card */}
         <View style={styles.identityCard}>
           {/* Avatar + Info Column */}
@@ -832,4 +868,41 @@ const getStyles = (colors: any, isDark: boolean) =>
     momentoMoreBtn: {
       padding: 6,
     },
+    safetyUpdateBanner: {
+      marginBottom: 16,
+      borderRadius: 16,
+      overflow: 'hidden',
+      elevation: 4,
+      shadowColor: '#4F46E5',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.25,
+      shadowRadius: 8,
+    },
+    safetyUpdateGradient: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      gap: 12,
+    },
+    safetyUpdateIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: 'rgba(255,255,255,0.2)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    safetyUpdateTitle: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '700',
+      marginBottom: 2,
+    },
+    safetyUpdateSubtitle: {
+      color: 'rgba(255,255,255,0.85)',
+      fontSize: 11.5,
+      lineHeight: 16,
+    },
   });
+

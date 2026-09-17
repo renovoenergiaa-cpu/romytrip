@@ -1,5 +1,6 @@
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
+import { Redirect } from 'expo-router';
 import { supabase } from '../src/lib/supabase';
 import { colors, spacing, typography } from '../src/theme';
 
@@ -202,6 +203,12 @@ const MOCK_PROFILES = [
 ];
 
 export default function DevSeedScreen() {
+  // 🔒 SECURITY: This screen must NEVER be accessible in production.
+  // It creates accounts with known credentials (password123!) and is for dev only.
+  if (!__DEV__) {
+    return <Redirect href="/(tabs)" />;
+  }
+
   const [logs, setLogs] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 

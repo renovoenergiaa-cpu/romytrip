@@ -127,14 +127,16 @@ export function useCreateCommunity() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // 1. Generate UUID for conversation
-      const generateUUID = () => {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-            const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        });
+      // 🔒 VULN-11 Fix: Cryptographically secure UUID instead of Math.random()
+      const generateSecureUUID = (): string => {
+        const bytes = new Uint8Array(16);
+        crypto.getRandomValues(bytes);
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
       };
-      const convId = generateUUID();
+      const convId = generateSecureUUID();
 
       // 2. Create the group conversation
       const { error: convErr } = await supabase
@@ -260,17 +262,26 @@ export function useCreateCommunityPost() {
       let publicUrl = null;
 
       if (mediaUri) {
-        const ext = mediaUri.substring(mediaUri.lastIndexOf('.') + 1) || 'jpg';
+        const rawExt = mediaUri.substring(mediaUri.lastIndexOf('.') + 1).toLowerCase() || 'jpg';
+        const allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
+        const ext = allowedExts.includes(rawExt) ? rawExt : 'jpg';
         const fileName = `${user.id}/${Date.now()}.${ext}`;
 
         if (Platform.OS === 'web') {
           const response = await fetch(mediaUri);
           const blob = await response.blob();
+          if (blob.size > 15 * 1024 * 1024) {
+            throw new Error('A imagem selecionada é muito grande (máximo 15MB).');
+          }
           const { error: uploadError } = await supabase.storage
             .from('posts')
             .upload(fileName, blob, { contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}` });
           if (uploadError) throw uploadError;
         } else {
+          const fileInfo = await FileSystem.getInfoAsync(mediaUri);
+          if (fileInfo.exists && fileInfo.size && fileInfo.size > 15 * 1024 * 1024) {
+            throw new Error('A imagem selecionada é muito grande (máximo 15MB).');
+          }
           const base64 = await FileSystem.readAsStringAsync(mediaUri, { encoding: 'base64' });
           const { error: uploadError } = await supabase.storage
             .from('posts')

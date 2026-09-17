@@ -105,7 +105,14 @@ export default function EditProfileScreen() {
 
       const { data, error } = await supabase
         .from('users')
-        .select('*')
+        .select(`
+          id, name, city, sex, photos, bio, destination,
+          check_in, check_out, is_flexible, companions,
+          travel_styles, interests, budget, cost_split,
+          group_travel, one_person, invitations, is_free,
+          created_at, updated_at, connection_intentions,
+          gender_preference, privacy_settings, dob, plan
+        `)
         .eq('id', user.id)
         .single();
 
@@ -122,7 +129,7 @@ export default function EditProfileScreen() {
       setDestination(profile.destination || 'Em casa');
       setObjective(
         profile.connection_intentions?.[0] ||
-        profile.connection_objective ||
+        (profile as any).connection_objective ||
         'Conhecer pessoas para explorar a cidade, tomar café, fazer trilhas e trocar experiências.'
       );
       setSelectedInterests(

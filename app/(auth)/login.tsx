@@ -11,10 +11,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
-import { useAuth } from '../../src/context/AuthContext';
+import { useAuth, checkProfileComplete } from '../../src/context/AuthContext';
 import { useOnboardingStore } from '../../src/store/onboardingStore';
 import { CustomInput } from '../../src/components/CustomInput';
 import { colors, spacing, typography } from '../../src/theme';
@@ -25,20 +26,24 @@ WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { session } = useAuth();
-  const { updateField } = useOnboardingStore();
+  const { session, isProfileComplete } = useAuth();
+  const { updateField, reset: resetOnboarding } = useOnboardingStore();
 
   const [mode, setMode] = useState<'login' | 'signup'>('login');
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [isSigningUp, setIsSigningUp] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
-  // Redireciona declarativamente para tabs se já estiver autenticado e não estiver criando conta
+  // Redireciona declarativamente se autenticado
   if (session && !isSigningUp) {
-    return <Redirect href="/(tabs)" />;
+    if (isProfileComplete === false) {
+      return <Redirect href="/(auth)/onboarding/step1-personal" />;
+    }
+    if (isProfileComplete === true) {
+      return <Redirect href="/(tabs)" />;
+    }
   }
 
   const showAlert = (title: string, message: string) => {
@@ -82,7 +87,7 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
       });
@@ -90,8 +95,13 @@ export default function LoginScreen() {
       if (error) {
         showAlert('Erro ao entrar', translateAuthError(error));
         setLoading(false);
-      } else {
-        router.replace('/(tabs)');
+      } else if (data.user) {
+        const complete = await checkProfileComplete(data.user.id);
+        if (complete) {
+          router.replace('/(tabs)');
+        } else {
+          router.replace('/(auth)/onboarding/step1-personal');
+        }
       }
     } catch (err: any) {
       showAlert('Erro', translateAuthError(err));
@@ -100,19 +110,14 @@ export default function LoginScreen() {
   };
 
   const handleSignup = async () => {
-    const cleanName = name.trim();
     const cleanEmail = email.trim();
 
     if (!cleanEmail || !password) {
-      showAlert('Aviso', 'Preencha todos os campos obrigatórios para criar sua conta.');
+      showAlert('Aviso', 'Preencha o e-mail e crie uma senha para criar sua conta.');
       return;
     }
     if (password.length < 6) {
       showAlert('Senha Curta', 'A senha precisa ter pelo menos 6 caracteres.');
-      return;
-    }
-    if (password !== confirmPassword) {
-      showAlert('Senhas não coincidem', 'A confirmação de senha precisa ser igual à senha digitada.');
       return;
     }
 
@@ -131,9 +136,6 @@ export default function LoginScreen() {
         email: cleanEmail,
         password,
         options: {
-          data: {
-            full_name: cleanName || undefined,
-          },
           emailRedirectTo: redirectUrl,
         },
       });
@@ -146,32 +148,21 @@ export default function LoginScreen() {
       }
 
       if (data.user) {
-        if (cleanName) {
-          updateField('name', cleanName);
+        // Criar ou atualizar registro base em public.users
+        try {
+          await supabase.from('users').upsert({
+            id: data.user.id,
+            email: data.user.email,
+          });
+        } catch (e) {
+          console.warn('Erro ao criar registro de usuário:', e);
         }
 
-        if (!data.session) {
-          showAlert(
-            'Verifique seu e-mail',
-            'Enviamos um link de confirmação para o seu e-mail. Por favor, acesse sua caixa de entrada e clique no link para ativar sua conta antes de fazer o login.'
-          );
-          setLoading(false);
-          setIsSigningUp(false);
-        } else {
-          // Criar ou atualizar registro em public.users
-          try {
-            await supabase.from('users').upsert({
-              id: data.user.id,
-              email: data.user.email,
-              name: cleanName || null,
-            });
-          } catch (e) {
-            console.warn('Erro ao criar perfil inicial:', e);
-          }
+        // Limpar o store para a nova criação de perfil
+        resetOnboarding();
 
-          // Seguir para o onboarding
-          router.replace('/(auth)/onboarding/step1-personal');
-        }
+        // Seguir imediatamente para o onboarding tela a tela
+        router.replace('/(auth)/onboarding/step1-personal');
       }
     } catch (err: any) {
       setIsSigningUp(false);
@@ -212,23 +203,31 @@ export default function LoginScreen() {
         const res = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
 
         if (res.type === 'success' && res.url) {
-          // 1. Checa se o provedor retornou erro
           if (res.url.includes('error=')) {
             const errParam = res.url.match(/[?&#]error_description=([^&#]+)/);
             throw new Error(errParam ? decodeURIComponent(errParam[1]) : 'Autenticação cancelada ou com erro');
           }
 
-          // 2. Fluxo PKCE (Supabase v2 padrão): ?code=...
           const codeMatch = res.url.match(/[?&#]code=([^&#]+)/);
           if (codeMatch && codeMatch[1]) {
             const code = decodeURIComponent(codeMatch[1]);
-            const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+            const { data: sessionData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
             if (exchangeError) throw exchangeError;
-            router.replace('/(tabs)');
+            if (sessionData?.user) {
+              const complete = await checkProfileComplete(sessionData.user.id);
+              if (complete) {
+                router.replace('/(tabs)');
+              } else {
+                const fullName = sessionData.user.user_metadata?.full_name || sessionData.user.user_metadata?.name;
+                if (fullName) updateField('name', fullName);
+                router.replace('/(auth)/onboarding/step1-personal');
+              }
+            } else {
+              router.replace('/(tabs)');
+            }
             return;
           }
 
-          // 3. Fluxo Implícito: #access_token=...&refresh_token=...
           const hashOrQuery = res.url.includes('#') ? res.url.split('#')[1] : res.url.split('?')[1];
           if (hashOrQuery) {
             const params = hashOrQuery.split('&').reduce((acc, current) => {
@@ -238,12 +237,23 @@ export default function LoginScreen() {
             }, {} as Record<string, string>);
 
             if (params.access_token && params.refresh_token) {
-              const { error: sessionError } = await supabase.auth.setSession({
+              const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
                 access_token: params.access_token,
                 refresh_token: params.refresh_token,
               });
               if (sessionError) throw sessionError;
-              router.replace('/(tabs)');
+              if (sessionData?.user) {
+                const complete = await checkProfileComplete(sessionData.user.id);
+                if (complete) {
+                  router.replace('/(tabs)');
+                } else {
+                  const fullName = sessionData.user.user_metadata?.full_name || sessionData.user.user_metadata?.name;
+                  if (fullName) updateField('name', fullName);
+                  router.replace('/(auth)/onboarding/step1-personal');
+                }
+              } else {
+                router.replace('/(tabs)');
+              }
               return;
             }
           }
@@ -280,8 +290,8 @@ export default function LoginScreen() {
               </Text>
               <Text style={styles.subtitle}>
                 {mode === 'login'
-                  ? 'Conecte-se com viajantes do mundo todo'
-                  : 'Junte-se à comunidade e descubra novas viagens'}
+                  ? 'Conecte-se com viajantes com a sua mesma sintonia'
+                  : 'Monte seu perfil e encontre companhias de viagem reais'}
               </Text>
             </View>
 
@@ -309,15 +319,6 @@ export default function LoginScreen() {
 
             {/* Formulário */}
             <View style={styles.form}>
-              {mode === 'signup' && (
-                <CustomInput
-                  placeholder="Seu nome completo"
-                  autoCapitalize="words"
-                  value={name}
-                  onChangeText={setName}
-                />
-              )}
-
               <CustomInput
                 placeholder="E-mail"
                 keyboardType="email-address"
@@ -327,25 +328,11 @@ export default function LoginScreen() {
               />
 
               <CustomInput
-                placeholder="Senha"
+                placeholder={mode === 'signup' ? 'Crie uma senha (mínimo 6 dígitos)' : 'Senha'}
                 secureTextEntry
                 value={password}
                 onChangeText={setPassword}
               />
-
-              {mode === 'signup' && (
-                <>
-                  <CustomInput
-                    placeholder="Confirmar senha"
-                    secureTextEntry
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                  />
-                  <Text style={styles.passwordHint}>
-                    Mínimo de 6 caracteres para sua senha.
-                  </Text>
-                </>
-              )}
 
               {mode === 'login' ? (
                 <TouchableOpacity
@@ -370,11 +357,23 @@ export default function LoginScreen() {
                   {loading ? (
                     <ActivityIndicator color={colors.surface} />
                   ) : (
-                    <Text style={styles.primaryButtonText}>Criar minha conta</Text>
+                    <Text style={styles.primaryButtonText}>Criar conta e montar perfil →</Text>
                   )}
                 </TouchableOpacity>
               )}
             </View>
+
+            {/* Aviso de Consentimento LGPD */}
+            {mode === 'signup' && (
+              <View style={styles.lgpdNoticeContainer}>
+                <Text style={styles.lgpdNoticeText}>
+                  Ao criar sua conta, você concorda com nossos{' '}
+                  <Text style={styles.lgpdLinkText} onPress={() => setShowPrivacyModal(true)}>
+                    Termos de Uso e Política de Privacidade (LGPD)
+                  </Text>.
+                </Text>
+              </View>
+            )}
 
             {/* Divisor */}
             <View style={styles.dividerContainer}>
@@ -425,6 +424,59 @@ export default function LoginScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Modal de Termos de Uso e LGPD */}
+      <Modal visible={showPrivacyModal} animationType="slide" transparent={true} onRequestClose={() => setShowPrivacyModal(false)}>
+        <View style={styles.privacyModalOverlay}>
+          <View style={styles.privacyModalCard}>
+            <View style={styles.privacyModalHeader}>
+              <Text style={styles.privacyModalTitle}>Privacidade & LGPD</Text>
+              <TouchableOpacity onPress={() => setShowPrivacyModal(false)} style={{ padding: 4 }}>
+                <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.textSecondary }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.privacyModalBody} showsVerticalScrollIndicator={false}>
+              <Text style={styles.privacySectionTitle}>Compromisso com sua Privacidade</Text>
+              <Text style={styles.privacyText}>
+                O Romy trata seus dados pessoais em total conformidade com a Lei Geral de Proteção de Dados (Lei nº 13.709/2018 - LGPD).
+              </Text>
+
+              <Text style={styles.privacySectionTitle}>1. Quais dados coletamos?</Text>
+              <Text style={styles.privacyText}>
+                • Dados de Identificação: Nome, e-mail e fotos de perfil.{'\n'}
+                • Dados de Viagem: Destinos, datas e estilo de viagem.{'\n'}
+                • Geolocalização aproximada: Somente para exibir viajantes próximos, sem expor coordenadas exatas a terceiros.
+              </Text>
+
+              <Text style={styles.privacySectionTitle}>2. Para que usamos seus dados?</Text>
+              <Text style={styles.privacyText}>
+                Conectar viajantes com interesses em comum, recomendar itinerários e garantir a segurança coletiva (especialmente para viajantes mulheres solo).
+              </Text>
+
+              <Text style={styles.privacySectionTitle}>3. Seus Direitos (Art. 18 da LGPD)</Text>
+              <Text style={styles.privacyText}>
+                Você pode a qualquer momento:{'\n'}
+                • Acessar e retificar seus dados nas configurações.{'\n'}
+                • Excluir sua conta com eliminação das fotos e anonimização do perfil.{'\n'}
+                • Revogar permissões a qualquer instante.
+              </Text>
+
+              <Text style={styles.privacySectionTitle}>4. Segurança da Informação</Text>
+              <Text style={styles.privacyText}>
+                Seus dados são protegidos por criptografia e políticas estritas de acesso (Row Level Security), impedindo acessos não autorizados.
+              </Text>
+
+              <View style={{ height: 20 }} />
+            </ScrollView>
+            <TouchableOpacity 
+              style={styles.privacyCloseButton} 
+              onPress={() => setShowPrivacyModal(false)}
+            >
+              <Text style={styles.privacyCloseButtonText}>Entendi e Concordo</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -571,5 +623,83 @@ const styles = StyleSheet.create({
   bottomSwitchHighlight: {
     color: colors.primary,
     fontWeight: '700',
+  },
+  lgpdNoticeContainer: {
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+    paddingHorizontal: spacing.xs,
+  },
+  lgpdNoticeText: {
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  lgpdLinkText: {
+    color: colors.primary,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  privacyModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  privacyModalCard: {
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '80%',
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    padding: spacing.xl,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 15,
+    elevation: 8,
+  },
+  privacyModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  privacyModalTitle: {
+    ...typography.h2,
+    color: colors.textPrimary,
+    fontSize: 20,
+  },
+  privacyModalBody: {
+    marginVertical: spacing.sm,
+  },
+  privacySectionTitle: {
+    ...typography.h3,
+    color: colors.textPrimary,
+    fontSize: 15,
+    marginTop: spacing.md,
+    marginBottom: 4,
+  },
+  privacyText: {
+    ...typography.body,
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  privacyCloseButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  privacyCloseButtonText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 15,
   },
 });

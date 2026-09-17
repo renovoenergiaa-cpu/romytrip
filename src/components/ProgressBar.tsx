@@ -1,3 +1,4 @@
+import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { colors } from '../theme';
 
@@ -10,13 +11,15 @@ export function ProgressBar({ totalSteps, currentStep }: ProgressBarProps) {
   return (
     <View style={styles.container}>
       {Array.from({ length: totalSteps }).map((_, index) => {
-        const isActive = index + 1 === currentStep;
+        const isCompleted = index + 1 <= currentStep;
+        const isCurrent = index + 1 === currentStep;
         return (
           <View
             key={index}
             style={[
-              styles.dot,
-              isActive && styles.activeDot,
+              styles.segment,
+              isCompleted && styles.segmentCompleted,
+              isCurrent && styles.segmentCurrent,
             ]}
           />
         );
@@ -28,19 +31,22 @@ export function ProgressBar({ totalSteps, currentStep }: ProgressBarProps) {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
-    marginVertical: 20,
+    gap: 6,
+    width: '100%',
+    marginBottom: 24,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#E0E0E0',
+  segment: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E5E7EB',
   },
-  activeDot: {
-    width: 24,
+  segmentCompleted: {
+    backgroundColor: colors.primary,
+  },
+  segmentCurrent: {
     backgroundColor: colors.primary,
   },
 });
+

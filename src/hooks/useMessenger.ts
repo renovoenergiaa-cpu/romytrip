@@ -218,8 +218,11 @@ export const useSendMessage = () => {
           .upload(fileName, decode(base64File), { contentType: `audio/${fileExt}`, upsert: true });
 
         if (!uploadErr && uploadData) {
-          const { data: urlData } = supabase.storage.from('chat_audio').getPublicUrl(uploadData.path);
-          finalAudioUrl = urlData.publicUrl;
+          // 🔒 N-06 Fix: chat_audio is a private bucket — use signed URL, not public URL
+          const { data: signedData } = await supabase.storage
+            .from('chat_audio')
+            .createSignedUrl(uploadData.path, 3600); // 1 hour expiry
+          finalAudioUrl = signedData?.signedUrl || audioUri;
         } else {
           finalAudioUrl = audioUri;
         }
@@ -235,13 +238,17 @@ export const useSendMessage = () => {
           const base64File = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' });
           const contentType = fileExt === 'png' ? 'image/png' : 'image/jpeg';
 
+          // 🔒 N-05 Fix: images go to 'chat_images' bucket, not 'chat_audio'
           const { data: uploadData, error: uploadErr } = await supabase.storage
-            .from('chat_audio')
+            .from('chat_images')
             .upload(fileName, decode(base64File), { contentType, upsert: true });
 
           if (!uploadErr && uploadData) {
-            const { data: urlData } = supabase.storage.from('chat_audio').getPublicUrl(uploadData.path);
-            finalImageUrl = urlData.publicUrl;
+            // 🔒 N-06 Fix: use signed URL for private bucket
+            const { data: signedData } = await supabase.storage
+              .from('chat_images')
+              .createSignedUrl(uploadData.path, 3600);
+            finalImageUrl = signedData?.signedUrl || imageUri;
           } else {
             console.log('[IMAGE UPLOAD] Failed:', uploadErr?.message);
             finalImageUrl = imageUri;
@@ -260,13 +267,17 @@ export const useSendMessage = () => {
           const fileName = `${userId}/vid_${Date.now()}.${fileExt}`;
           const base64File = await FileSystem.readAsStringAsync(videoUri, { encoding: 'base64' });
 
+          // 🔒 N-05 Fix: videos go to 'chat_videos' bucket, not 'chat_audio'
           const { data: uploadData, error: uploadErr } = await supabase.storage
-            .from('chat_audio')
+            .from('chat_videos')
             .upload(fileName, decode(base64File), { contentType: 'video/mp4', upsert: true });
 
           if (!uploadErr && uploadData) {
-            const { data: urlData } = supabase.storage.from('chat_audio').getPublicUrl(uploadData.path);
-            finalVideoUrl = urlData.publicUrl;
+            // 🔒 N-06 Fix: use signed URL for private bucket
+            const { data: signedData } = await supabase.storage
+              .from('chat_videos')
+              .createSignedUrl(uploadData.path, 3600);
+            finalVideoUrl = signedData?.signedUrl || videoUri;
           } else {
             console.log('[VIDEO UPLOAD] Failed:', uploadErr?.message);
             finalVideoUrl = videoUri;
@@ -393,14 +404,17 @@ export const useStartConversation = () => {
           }
         }
 
-        // 2. Generate UUID manually to avoid RLS SELECT issues after INSERT
-        const generateUUID = () => {
-          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-              const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-              return v.toString(16);
-          });
+        // 🔒 N-07 Fix: Use crypto-secure UUID instead of Math.random()-based generator
+        // Math.random() is NOT cryptographically secure and can be predictable.
+        const generateSecureUUID = (): string => {
+          const bytes = new Uint8Array(16);
+          crypto.getRandomValues(bytes);
+          bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+          bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant
+          const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+          return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
         };
-        const convId = generateUUID();
+        const convId = generateSecureUUID();
 
         // 3. Create the conversation
         const { error: createErr } = await supabase

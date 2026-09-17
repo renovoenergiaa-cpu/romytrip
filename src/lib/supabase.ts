@@ -7,11 +7,20 @@ if (Platform.OS !== 'web') {
   require('react-native-url-polyfill/auto');
 }
 
-export const supabaseUrl =
-  process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://ybolfnlilxygcoaupygp.supabase.co';
-export const supabaseAnonKey =
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlib2xmbmxpbHh5Z2NvYXVweWdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2MjUxMzYsImV4cCI6MjA5NDIwMTEzNn0.45x9ZGIFYohq5d0TIwvjQH6T0UG4KSqhDtHJRlSbupk';
+// SECURITY: Never use hardcoded fallback values for secrets.
+// If these variables are missing, the app should fail explicitly.
+const _supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+const _supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!_supabaseUrl || !_supabaseAnonKey) {
+  throw new Error(
+    '[Romy] Missing required environment variables: EXPO_PUBLIC_SUPABASE_URL and/or EXPO_PUBLIC_SUPABASE_ANON_KEY. ' +
+    'Check your .env file and ensure variables are prefixed with EXPO_PUBLIC_.'
+  );
+}
+
+export const supabaseUrl: string = _supabaseUrl;
+export const supabaseAnonKey: string = _supabaseAnonKey;
 
 // Storage compatível tanto para Web (localStorage / seguro no SSR) quanto Mobile (AsyncStorage)
 const isWeb = Platform.OS === 'web';

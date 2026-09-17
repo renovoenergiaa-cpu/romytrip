@@ -1,6 +1,6 @@
 import { View, StyleSheet, ScrollView, TouchableOpacity, Text, TextInput, Image, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Calendar, Search, Upload } from 'lucide-react-native';
+import { Upload, ShieldCheck, Sparkles, Plus, Trash2, ChevronLeft } from 'lucide-react-native';
 import { useState, useMemo } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { CustomDatePicker } from '../../../src/components/CustomDatePicker';
@@ -15,43 +15,73 @@ export default function Step1PersonalScreen() {
   const router = useRouter();
   const { name, dob, city, sex, photos, bio, updateField } = useOnboardingStore();
   
-  // Memoize to prevent infinite loop on Android DateTimePicker
   const today = useMemo(() => new Date(), []);
   
   const handleNext = () => {
-    if (!name || !dob || !city || !sex) {
-      Alert.alert('Aviso', 'Por favor, preencha todos os campos obrigatórios (Nome, Data de Nascimento, Cidade e Sexo) antes de continuar.');
+    if (!name?.trim() || !dob || !city?.trim() || !sex) {
+      Alert.alert('Aviso', 'Preencha seu nome, data de nascimento, cidade base e gênero para continuar.');
+      return;
+    }
+    if (!photos || photos.length === 0 || !photos[0]) {
+      Alert.alert('Foto Obrigatória', 'Adicione pelo menos uma foto sua para que seus futuros companheiros de viagem te reconheçam.');
       return;
     }
     router.push('/(auth)/onboarding/step2-trip');
   };
 
   const pickImage = async (index: number) => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
 
-    if (!result.canceled) {
-      const newPhotos = [...photos];
-      newPhotos[index] = result.assets[0].uri;
-      updateField('photos', newPhotos);
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        const newPhotos = [...(photos || [])];
+        newPhotos[index] = result.assets[0].uri;
+        updateField('photos', newPhotos);
+      }
+    } catch (e) {
+      console.warn('Erro ao selecionar foto:', e);
     }
   };
 
+  const removePhoto = (index: number) => {
+    const newPhotos = [...(photos || [])];
+    newPhotos.splice(index, 1);
+    updateField('photos', newPhotos);
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <ProgressBar totalSteps={5} currentStep={1} />
+      <View style={styles.topNav}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.replace('/(auth)/login')}>
+          <ChevronLeft size={22} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <Text style={styles.stepBadge}>Passo 1 de 6</Text>
+        <View style={{ width: 32 }} />
+      </View>
+
+      <ProgressBar totalSteps={6} currentStep={1} />
       
+      <View style={styles.header}>
+        <Text style={styles.title}>Quem é você no mundo?</Text>
+        <Text style={styles.subtitle}>
+          Crie seu perfil autêntico para se conectar com pessoas com a sua mesma energia de viagem.
+        </Text>
+      </View>
+
+      {/* Nome */}
+      <Text style={styles.label}>Como quer ser chamado(a)?</Text>
       <CustomInput 
-        placeholder="Seu nome" 
+        placeholder="Seu nome ou apelido" 
         value={name}
         onChangeText={(t) => updateField('name', t)}
       />
       
+      {/* Data de Nascimento */}
       <Text style={styles.label}>Data de nascimento</Text>
       <View style={{ marginBottom: spacing.md }}>
         <CustomDatePicker 
@@ -60,42 +90,80 @@ export default function Step1PersonalScreen() {
           maximumDate={today}
         />
       </View>
-      <Text style={styles.label}>Cidade atual</Text>
-      <View style={{ zIndex: 10 }}>
+
+      {/* Cidade Base */}
+      <Text style={styles.label}>Sua cidade base</Text>
+      <Text style={styles.helperText}>Onde você mora quando não está na estrada (nunca exibimos sua localização exata).</Text>
+      <View style={{ zIndex: 10, marginBottom: spacing.md }}>
         <CityAutocomplete 
-          placeholder="Ex: São Paulo, Brasil" 
+          placeholder="Ex: Florianópolis, Brasil" 
           value={city}
           onChangeText={(t) => updateField('city', t)}
         />
       </View>
       
-      <Text style={styles.label}>Sexo</Text>
+      {/* Gênero */}
+      <Text style={styles.label}>Identidade de gênero</Text>
       <View style={styles.chipRow}>
         <Chip label="Feminino" selected={sex === 'Feminino'} onPress={() => updateField('sex', 'Feminino')} />
         <Chip label="Masculino" selected={sex === 'Masculino'} onPress={() => updateField('sex', 'Masculino')} />
+        <Chip label="Não-binário" selected={sex === 'Não-binário'} onPress={() => updateField('sex', 'Não-binário')} />
         <Chip label="Prefiro não dizer" selected={sex === 'Prefiro não dizer'} onPress={() => updateField('sex', 'Prefiro não dizer')} />
       </View>
-      
-      <Text style={styles.label}>Suas fotos (3-6)</Text>
+
+      {/* Banner de Segurança para Mulheres */}
+      {sex === 'Feminino' && (
+        <View style={styles.womenSafetyCard}>
+          <View style={styles.safetyHeader}>
+            <ShieldCheck size={20} color="#E11D48" />
+            <Text style={styles.safetyTitle}>Espaço Seguro Romy para Mulheres</Text>
+          </View>
+          <Text style={styles.safetyDesc}>
+            Você terá controle total nas próximas etapas para conectar exclusivamente com outras mulheres, encontrar companheiras de hospedagem e viajar com total tranquilidade.
+          </Text>
+        </View>
+      )}
+
+      {/* Fotos de Viagem */}
+      <Text style={styles.label}>Suas fotos de viagem (1 a 4 fotos)</Text>
+      <Text style={styles.helperText}>A primeira foto será a capa do seu perfil. Escolha fotos sorrindo ou em viagens!</Text>
       <View style={styles.photoGrid}>
-        {[0, 1, 2].map((index) => (
-          <TouchableOpacity key={index} style={styles.photoBox} onPress={() => pickImage(index)}>
-            {photos[index] ? (
-              <Image source={{ uri: photos[index] }} style={styles.photoImage} />
-            ) : (
-              <Upload size={24} color={colors.textMuted} />
-            )}
-          </TouchableOpacity>
-        ))}
+        {[0, 1, 2, 3].map((index) => {
+          const uri = photos?.[index];
+          const isMain = index === 0;
+          return (
+            <View key={index} style={[styles.photoBox, isMain && styles.photoBoxMain]}>
+              {uri ? (
+                <>
+                  <Image source={{ uri }} style={styles.photoImage} />
+                  {isMain && (
+                    <View style={styles.mainBadge}>
+                      <Text style={styles.mainBadgeText}>Capa</Text>
+                    </View>
+                  )}
+                  <TouchableOpacity style={styles.removeBtn} onPress={() => removePhoto(index)}>
+                    <Trash2 size={14} color="#FFF" />
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <TouchableOpacity style={styles.uploadPlaceholder} onPress={() => pickImage(index)} activeOpacity={0.7}>
+                  <Plus size={22} color={colors.primary} />
+                  <Text style={styles.uploadText}>{isMain ? 'Foto Principal' : 'Adicionar'}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })}
       </View>
       
-      <Text style={styles.label}>Bio (máx 300 caracteres)</Text>
+      {/* Bio */}
+      <Text style={styles.label}>Bio de viajante (máx. 300 caracteres)</Text>
       <View style={styles.bioContainer}>
         <TextInput
           style={styles.bioInput}
           multiline
-          numberOfLines={4}
-          placeholder="Conte um pouco sobre você e o que busca nas viagens..."
+          numberOfLines={3}
+          placeholder="Ex: Apaixonado(a) por provar comidas de rua, ver o nascer do sol e nunca recuso um convite para uma trilha ou café local..."
           placeholderTextColor={colors.textMuted}
           value={bio}
           onChangeText={(t) => updateField('bio', t)}
@@ -103,8 +171,8 @@ export default function Step1PersonalScreen() {
         />
       </View>
 
-      <TouchableOpacity style={styles.button} onPress={handleNext}>
-        <Text style={styles.buttonText}>Próximo</Text>
+      <TouchableOpacity style={styles.button} onPress={handleNext} activeOpacity={0.85}>
+        <Text style={styles.buttonText}>Continuar para Próxima Viagem →</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -116,74 +184,182 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
-    padding: spacing.xl,
-    paddingTop: 60,
+    padding: spacing.lg,
+    paddingTop: Platform.OS === 'ios' ? 50 : 36,
+    paddingBottom: 40,
+  },
+  topNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepBadge: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.primary,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  header: {
+    marginBottom: spacing.lg,
+  },
+  title: {
+    ...typography.h1,
+    fontSize: 26,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  subtitle: {
+    ...typography.body,
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
   },
   label: {
     ...typography.caption,
     color: colors.textPrimary,
-    fontWeight: '600',
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  helperText: {
+    ...typography.caption,
+    fontSize: 12,
+    color: colors.textMuted,
     marginBottom: spacing.xs,
-  },
-  dateInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.inputBackground,
-    borderRadius: 12,
-    paddingHorizontal: spacing.md,
-    height: 52,
-  },
-  dateText: {
-    ...typography.body,
-    color: colors.textPrimary,
   },
   chipRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  womenSafetyCard: {
+    backgroundColor: '#FFF1F2',
+    borderColor: '#FECDD3',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: spacing.md,
     marginBottom: spacing.lg,
+  },
+  safetyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  safetyTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#9F1239',
+  },
+  safetyDesc: {
+    fontSize: 12,
+    color: '#881337',
+    lineHeight: 18,
   },
   photoGrid: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    flexWrap: 'wrap',
+    gap: 10,
     marginBottom: spacing.lg,
   },
   photoBox: {
-    flex: 1,
+    width: '48%',
     aspectRatio: 1,
-    backgroundColor: colors.inputBackground,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
     overflow: 'hidden',
+    position: 'relative',
+  },
+  photoBoxMain: {
+    borderColor: colors.primary,
+    borderWidth: 2,
   },
   photoImage: {
     width: '100%',
     height: '100%',
   },
+  mainBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  mainBadgeText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  removeBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 4,
+  },
+  uploadText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
   bioContainer: {
-    backgroundColor: colors.inputBackground,
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
     padding: spacing.md,
     marginBottom: spacing.xl,
-    minHeight: 120,
+    minHeight: 90,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   bioInput: {
     ...typography.body,
+    fontSize: 14,
     color: colors.textPrimary,
     textAlignVertical: 'top',
   },
   button: {
     backgroundColor: colors.primary,
-    borderRadius: 12,
+    borderRadius: 14,
     height: 52,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: spacing.md,
-    marginBottom: 40,
+    marginBottom: spacing.xl,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
   },
   buttonText: {
-    color: colors.surface,
+    color: '#FFFFFF',
     ...typography.body,
-    fontWeight: '600',
+    fontWeight: '700',
+    fontSize: 15,
   },
 });

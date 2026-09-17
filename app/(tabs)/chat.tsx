@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput, Image, ActivityIndicator, Modal, Alert, Platform, StatusBar } from 'react-native';
-import { Search, MessageCircle, Users, Plus, X, BellOff, Archive, LogOut, Trash2 } from 'lucide-react-native';
+import { Search, MessageCircle, Users, User, Plus, X, BellOff, Archive, LogOut, Trash2 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { spacing, typography, useTheme } from '../../src/theme';
@@ -152,8 +152,15 @@ export default function ChatScreen() {
             })
             .map((chat: any) => {
             const isGroup = chat.is_group;
-            const name = isGroup ? chat.name : (chat.other_participant?.name || 'Viajante');
-            const avatar = isGroup ? null : (chat.other_participant?.photos?.[0] || defaultAvatar);
+            const isDeletedAccount = !isGroup && (
+              chat.other_participant?.name === 'Conta Excluída' || 
+              chat.other_participant?.name === 'Usuário Romy' ||
+              !chat.other_participant
+            );
+            const name = isGroup 
+              ? chat.name 
+              : (isDeletedAccount ? 'Conta Excluída' : (chat.other_participant?.name || 'Viajante'));
+            const avatar = isGroup ? null : (isDeletedAccount ? null : (chat.other_participant?.photos?.[0] || defaultAvatar));
             let lastMessage = chat.last_message?.text || 'Nova conversa';
             if (lastMessage.startsWith('[SYS:CALL_ENDED]')) lastMessage = '📞 Chamada encerrada';
             else if (lastMessage.startsWith('[SYS:CALL_REJECTED]')) lastMessage = '📞 Chamada recusada';
@@ -172,7 +179,11 @@ export default function ChatScreen() {
               >
                 {/* Avatar */}
                 <View style={styles.avatarContainer}>
-                  {avatar ? (
+                  {isDeletedAccount ? (
+                    <View style={[styles.avatarImage, { backgroundColor: isDark ? '#334155' : '#E2E8F0', justifyContent: 'center', alignItems: 'center' }]}>
+                      <User size={26} color={isDark ? '#94A3B8' : '#64748B'} />
+                    </View>
+                  ) : avatar ? (
                     <Image source={{ uri: avatar }} style={styles.avatarImage} />
                   ) : (
                     <View style={[styles.avatarImage, styles.avatarGroup]}>

@@ -37,7 +37,11 @@ export function useFeed(destination?: string) {
       const { data, error } = await query;
       if (error) throw error;
       
-      return data;
+      return (data || []).filter((post: any) => 
+        post.users && 
+        post.users.name !== 'Conta Excluída' && 
+        post.users.name !== 'Usuário Romy'
+      );
     },
   });
 }
@@ -52,18 +56,27 @@ export function useCreatePost() {
       if (!user) throw new Error('Not authenticated');
 
       const cleanUri = mediaUri.split('?')[0];
-      const ext = cleanUri.substring(cleanUri.lastIndexOf('.') + 1).toLowerCase() || 'jpg';
+      const rawExt = cleanUri.substring(cleanUri.lastIndexOf('.') + 1).toLowerCase() || 'jpg';
+      const allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
+      const ext = allowedExts.includes(rawExt) ? rawExt : 'jpg';
       const fileName = `${user.id}/${Date.now()}.${ext}`;
       let publicUrl = '';
 
       if (Platform.OS === 'web') {
         const response = await fetch(mediaUri);
         const blob = await response.blob();
+        if (blob.size > 15 * 1024 * 1024) {
+          throw new Error('A imagem selecionada é muito grande (máximo 15MB).');
+        }
         const { error: uploadError } = await supabase.storage
           .from('posts')
           .upload(fileName, blob, { contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}` });
         if (uploadError) throw uploadError;
       } else {
+        const fileInfo = await FileSystem.getInfoAsync(mediaUri);
+        if (fileInfo.exists && fileInfo.size && fileInfo.size > 15 * 1024 * 1024) {
+          throw new Error('A imagem selecionada é muito grande (máximo 15MB).');
+        }
         const base64 = await FileSystem.readAsStringAsync(mediaUri, { encoding: 'base64' });
         const { error: uploadError } = await supabase.storage
           .from('posts')
@@ -241,7 +254,8 @@ export function useDeleteFeedPost() {
       const { error } = await supabase
         .from('posts')
         .delete()
-        .eq('id', postId);
+        .eq('id', postId)
+        .eq('user_id', user.id); // 🔒 VULN-07 Fix: client-side author validation
 
       if (error) throw error;
       return { postId };
@@ -265,6 +279,7 @@ export function useUpdatePostCaption() {
         .from('posts')
         .update({ description })
         .eq('id', postId)
+        .eq('user_id', user.id) // 🔒 N-01 Fix: only allow editing own posts
         .select()
         .single();
 

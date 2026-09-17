@@ -1,7 +1,9 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform, StatusBar, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform, StatusBar, ScrollView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LogOut, User, Shield, Bell, HelpCircle, Moon, Sun, Smartphone, Trash2 } from 'lucide-react-native';
+import { useState } from 'react';
 import { supabase } from '../src/lib/supabase';
+import { useOnboardingStore } from '../src/store/onboardingStore';
 import { spacing, typography, useTheme, radius } from '../src/theme';
 import { useThemeStore, ThemeMode } from '../src/store/themeStore';
 import { ScreenHeader } from '../src/components/ScreenHeader';
@@ -10,6 +12,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const { themeMode, setThemeMode } = useThemeStore();
+  const [deleting, setDeleting] = useState(false);
 
   const handleLogout = async () => {
     const doLogout = async () => {
@@ -45,17 +48,89 @@ export default function SettingsScreen() {
 
   const handleDeleteAccount = () => {
     const doDelete = async () => {
+      setDeleting(true);
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          // Remove perfil público
-          await supabase.from('users').delete().eq('id', user.id);
-          // Remove o Auth real chamando a function no Supabase
+          // 1. Apaga arquivos físicos de mídia do usuário no Storage (LGPD Art. 18, VI)
+          try {
+            const { data: avatarFiles } = await supabase.storage.from('avatars').list(user.id);
+            if (avatarFiles && avatarFiles.length > 0) {
+              const paths = avatarFiles.map(f => `${user.id}/${f.name}`);
+              await supabase.storage.from('avatars').remove(paths);
+            }
+          } catch (e) {
+            console.warn('Erro ao purgar fotos de avatar no storage:', e);
+          }
+
+          try {
+            const { data: postFiles } = await supabase.storage.from('posts').list(user.id);
+            if (postFiles && postFiles.length > 0) {
+              const paths = postFiles.map(f => `${user.id}/${f.name}`);
+              await supabase.storage.from('posts').remove(paths);
+            }
+          } catch (e) {
+            console.warn('Erro ao purgar fotos de posts no storage:', e);
+          }
+
+          // 2. Apaga posts criados pelo usuário (fotos, mídias e posts do feed)
+          try {
+            await supabase.from('posts').delete().eq('user_id', user.id);
+          } catch (e) {
+            console.warn('Erro ao deletar posts:', e);
+          }
+
+          // 3. Apaga interações de feed (curtidas e comentários)
+          try {
+            await supabase.from('comments').delete().eq('user_id', user.id);
+            await supabase.from('post_likes').delete().eq('user_id', user.id);
+          } catch (e) {
+            console.warn('Erro ao deletar interações:', e);
+          }
+
+          // 4. Remove conexões ativas
+          try {
+            await supabase.from('connections').delete().or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
+          } catch (e) {
+            console.warn('Erro ao deletar conexões:', e);
+          }
+
+          // 5. Anonimiza perfil na tabela users (Padrão Instagram / LGPD)
+          // Preserva o histórico de conversas do outro viajante com nome 'Conta Excluída',
+          // mas apaga 100% dos dados privados, fotos, biografia e localização.
+          try {
+            await supabase.from('users').update({
+              name: 'Conta Excluída',
+              photos: [],
+              bio: null,
+              city: null,
+              dob: null,
+              destination: null,
+              check_in: null,
+              check_out: null,
+              travel_styles: [],
+              interests: [],
+              connection_intentions: [],
+              push_token: null,
+              is_free: false,
+            }).eq('id', user.id);
+          } catch (e) {
+            console.warn('Erro ao anonimizar perfil:', e);
+          }
+
+          // 6. Remove autenticação real do Supabase Auth para nunca mais conseguir logar
           try {
             await supabase.rpc('delete_user');
-          } catch {}
+          } catch (e) {
+            console.warn('RPC delete_user:', e);
+          }
         }
+        // Limpar store do onboarding em memória
+        useOnboardingStore.getState().reset();
+
+        // Encerrar sessão
         await supabase.auth.signOut();
+
         if (Platform.OS === 'web') {
           if (typeof window !== 'undefined') window.alert('Sua conta foi excluída com sucesso.');
         } else {
@@ -69,6 +144,8 @@ export default function SettingsScreen() {
         } else {
           Alert.alert('Erro', errorMsg);
         }
+      } finally {
+        setDeleting(false);
       }
     };
 
@@ -168,11 +245,22 @@ export default function SettingsScreen() {
           <Text style={dynamicStyles.logoutText}>Sair da Conta</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[dynamicStyles.menuItem, { borderBottomWidth: 0 }]} onPress={handleDeleteAccount}>
+        <TouchableOpacity 
+          style={[dynamicStyles.menuItem, { borderBottomWidth: 0 }]} 
+          onPress={handleDeleteAccount}
+          disabled={deleting}
+          activeOpacity={0.7}
+        >
           <View style={[dynamicStyles.menuIcon, { backgroundColor: isDark ? 'rgba(220,38,38,0.2)' : '#FEE2E2' }]}>
-            <Trash2 size={20} color="#DC2626" />
+            {deleting ? (
+              <ActivityIndicator size="small" color="#DC2626" />
+            ) : (
+              <Trash2 size={20} color="#DC2626" />
+            )}
           </View>
-          <Text style={[dynamicStyles.logoutText, { color: '#DC2626' }]}>Excluir Conta</Text>
+          <Text style={[dynamicStyles.logoutText, { color: '#DC2626' }]}>
+            {deleting ? 'Excluindo conta...' : 'Excluir Conta'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </View>

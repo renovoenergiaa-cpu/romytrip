@@ -145,85 +145,87 @@ export function GlobalNotificationProvider({ children }: { children: React.React
 
       if (!myParticipants || myParticipants.length === 0 || isCancelled) return;
 
-      const convIdSet = new Set(myParticipants.map((p) => p.conversation_id));
       const sid = sessionIdRef.current;
+      const msgCh = supabase.channel(`user_inbox_${sid}`);
 
-      const msgCh = supabase
-        .channel(`global_msgs_${sid}`)
-        .on(
-          'postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'messages' },
-          async (payload) => {
-            if (isCancelled || !mountedRef.current) return;
-            const newMsg = payload.new as any;
+      const handleNewMessage = async (payload: any) => {
+        if (isCancelled || !mountedRef.current) return;
+        const newMsg = payload.new as any;
 
-            if (newMsg.text?.startsWith('[SYS:CALL_OFFER]')) {
+        if (newMsg.text?.startsWith('[SYS:CALL_OFFER]')) {
+          try {
+            const callPayload = JSON.parse(newMsg.text.replace('[SYS:CALL_OFFER] ', ''));
+            if (callPayload.callerId === currentUserIdRef.current) return;
+            
+            let callerPhoto = callPayload.callerPhoto || '';
+            if (!callerPhoto) {
               try {
-                const callPayload = JSON.parse(newMsg.text.replace('[SYS:CALL_OFFER] ', ''));
-                if (callPayload.callerId === currentUserIdRef.current) return;
-                
-                let callerPhoto = callPayload.callerPhoto || '';
-                if (!callerPhoto) {
-                  try {
-                    const { data } = await supabase.from('users').select('photos').eq('id', callPayload.callerId).single();
-                    callerPhoto = data?.photos?.[0] || '';
-                  } catch {}
-                }
-                
-                callChannelRef.current = null; // Using DB fallback
-                setIncomingCall({
-                  conversationId: callPayload.conversationId,
-                  callerId: callPayload.callerId,
-                  callerName: callPayload.callerName || 'Alguém',
-                  callerPhoto,
-                  callType: callPayload.callType || 'voice',
-                });
-              } catch (e) {}
-              return;
+                const { data } = await supabase.from('users').select('photos').eq('id', callPayload.callerId).single();
+                callerPhoto = data?.photos?.[0] || '';
+              } catch {}
             }
+            
+            callChannelRef.current = null; // Using DB fallback
+            setIncomingCall({
+              conversationId: callPayload.conversationId,
+              callerId: callPayload.callerId,
+              callerName: callPayload.callerName || 'Alguém',
+              callerPhoto,
+              callType: callPayload.callType || 'voice',
+            });
+          } catch (e) {}
+          return;
+        }
 
-            if (newMsg.text?.startsWith('[SYS:CALL_ENDED]') || newMsg.text?.startsWith('[SYS:CALL_REJECTED]')) {
-              if (mountedRef.current) setIncomingCall(null);
-              return;
-            }
+        if (newMsg.text?.startsWith('[SYS:CALL_ENDED]') || newMsg.text?.startsWith('[SYS:CALL_REJECTED]')) {
+          if (mountedRef.current) setIncomingCall(null);
+          return;
+        }
 
-            if (!convIdSet.has(newMsg.conversation_id)) return;
-            if (newMsg.sender_id === currentUserIdRef.current) return;
-            if (newMsg.conversation_id === activeConversationIdRef.current) return;
+        if (newMsg.sender_id === currentUserIdRef.current) return;
+        if (newMsg.conversation_id === activeConversationIdRef.current) return;
 
-            try {
-              const { data: senderData } = await supabase
-                .from('users')
-                .select('name, photos')
-                .eq('id', newMsg.sender_id)
-                .single();
+        try {
+          const { data: senderData } = await supabase
+            .from('users')
+            .select('name, photos')
+            .eq('id', newMsg.sender_id)
+            .single();
 
-              if (isCancelled || !mountedRef.current) return;
+          if (isCancelled || !mountedRef.current) return;
 
-              const senderName = senderData?.name || 'Nova mensagem';
-              const senderPhoto = senderData?.photos?.[0] || '';
-              const messagePreview =
-                newMsg.text ||
-                (newMsg.audio_url
-                  ? '🎵 Mensagem de voz'
-                  : newMsg.image_url
-                  ? '📷 Foto'
-                  : newMsg.video_url
-                  ? '🎬 Vídeo'
-                  : '...');
+          const senderName = senderData?.name || 'Nova mensagem';
+          const senderPhoto = senderData?.photos?.[0] || '';
+          const messagePreview =
+            newMsg.text ||
+            (newMsg.audio_url
+              ? '🎵 Mensagem de voz'
+              : newMsg.image_url
+              ? '📷 Foto'
+              : newMsg.video_url
+              ? '🎬 Vídeo'
+              : '...');
 
-              if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
-              setMessageBanner({ conversationId: newMsg.conversation_id, senderName, senderPhoto, messagePreview });
-              bannerTimerRef.current = setTimeout(() => {
-                if (mountedRef.current) setMessageBanner(null);
-              }, 4000);
-            } catch (e) {
-              console.log('[GLOBAL_NOTIF] Error fetching sender info:', e);
-            }
-          }
-        )
-        .subscribe();
+          if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+          setMessageBanner({ conversationId: newMsg.conversation_id, senderName, senderPhoto, messagePreview });
+          bannerTimerRef.current = setTimeout(() => {
+            if (mountedRef.current) setMessageBanner(null);
+          }, 4000);
+        } catch (e) {
+          console.log('[GLOBAL_NOTIF] Error fetching sender info:', e);
+        }
+      };
 
+      // 🔒 VULN-02 Fix: Filter WebSocket messages per conversation to prevent global chat leaks
+      myParticipants.slice(0, 50).forEach((p) => {
+        msgCh.on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${p.conversation_id}` },
+          handleNewMessage
+        );
+      });
+
+      msgCh.subscribe();
       channels.push(msgCh);
     };
 

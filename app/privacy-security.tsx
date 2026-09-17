@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -15,26 +15,82 @@ import {
   StatusBar 
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, Shield, Eye, MapPin, Key, Smartphone, Lock, CheckCircle, X } from 'lucide-react-native';
+import { ChevronLeft, Shield, Eye, MapPin, Key, Smartphone, CheckCircle, X } from 'lucide-react-native';
 import { supabase } from '../src/lib/supabase';
 import { spacing, typography, useTheme } from '../src/theme';
+
+// Default privacy settings (most permissive = safe default for UX)
+const DEFAULT_PRIVACY = {
+  publicProfile: true,
+  showLocation: true,
+  showDestination: true,
+  onlineStatus: true,
+  allowDirectMessages: true,
+};
 
 export default function PrivacySecurityScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const styles = getStyles(colors, isDark);
 
-  const [publicProfile, setPublicProfile] = useState(true);
-  const [showLocation, setShowLocation] = useState(true);
-  const [showDestination, setShowDestination] = useState(true);
-  const [onlineStatus, setOnlineStatus] = useState(true);
-  const [allowDirectMessages, setAllowDirectMessages] = useState(true);
+  // 🔒 SECURITY FIX (V-07): Privacy settings are now persisted in the database.
+  // Previously these were local useState values that reset on every app restart,
+  // giving users a false sense of privacy control (LGPD violation - Art. 18).
+  const [privacySettings, setPrivacySettings] = useState(DEFAULT_PRIVACY);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Password Modal
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  // Load persisted privacy settings from Supabase on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data, error } = await supabase
+          .from('users')
+          .select('privacy_settings')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (!error && data?.privacy_settings) {
+          setPrivacySettings({ ...DEFAULT_PRIVACY, ...data.privacy_settings });
+        }
+      } catch (e) {
+        console.warn('Erro ao carregar configurações de privacidade:', e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadSettings();
+  }, []);
+
+  // Persist a single privacy toggle change to Supabase
+  const handleToggle = useCallback(async (key: keyof typeof DEFAULT_PRIVACY, value: boolean) => {
+    const updated = { ...privacySettings, [key]: value };
+    setPrivacySettings(updated);
+    setIsSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+      const { error } = await supabase
+        .from('users')
+        .update({ privacy_settings: updated })
+        .eq('id', user.id);
+      if (error) throw error;
+    } catch (e: any) {
+      // Rollback on failure
+      setPrivacySettings(privacySettings);
+      Alert.alert('Erro', 'Não foi possível salvar a configuração. Tente novamente.');
+      console.warn('Erro ao salvar privacidade:', e);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [privacySettings]);
 
   const handleChangePassword = async () => {
     if (!newPassword || newPassword.length < 6) {
@@ -65,8 +121,7 @@ export default function PrivacySecurityScreen() {
   const renderToggleItem = (
     title: string,
     subtitle: string,
-    value: boolean,
-    onValueChange: (val: boolean) => void,
+    settingKey: keyof typeof DEFAULT_PRIVACY,
     IconComponent: any
   ) => (
     <View style={styles.toggleRow}>
@@ -78,10 +133,11 @@ export default function PrivacySecurityScreen() {
         <Text style={styles.toggleSubtitle}>{subtitle}</Text>
       </View>
       <Switch
-        value={value}
-        onValueChange={onValueChange}
+        value={privacySettings[settingKey]}
+        onValueChange={(val) => handleToggle(settingKey, val)}
+        disabled={isSaving || isLoading}
         trackColor={{ false: colors.border, true: colors.primaryLight }}
-        thumbColor={value ? colors.primary : '#F4F3F4'}
+        thumbColor={privacySettings[settingKey] ? colors.primary : '#F4F3F4'}
       />
     </View>
   );
@@ -94,7 +150,9 @@ export default function PrivacySecurityScreen() {
           <ChevronLeft size={28} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Privacidade e Segurança</Text>
-        <View style={{ width: 28 }} />
+        <View style={{ width: 28, alignItems: 'center' }}>
+          {(isSaving || isLoading) && <ActivityIndicator size="small" color={colors.primary} />}
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -104,32 +162,28 @@ export default function PrivacySecurityScreen() {
         {renderToggleItem(
           'Perfil Visível',
           'Permitir que outros viajantes encontrem seu perfil na busca',
-          publicProfile,
-          setPublicProfile,
+          'publicProfile',
           Eye
         )}
 
         {renderToggleItem(
           'Mostrar Cidade no Perfil',
           'Exibir sua cidade de origem para a comunidade',
-          showLocation,
-          setShowLocation,
+          'showLocation',
           MapPin
         )}
 
         {renderToggleItem(
           'Mostrar Próximo Destino',
           'Permitir que outros vejam para onde você pretende viajar',
-          showDestination,
-          setShowDestination,
+          'showDestination',
           Shield
         )}
 
         {renderToggleItem(
           'Status Online',
           'Mostrar aos seus amigos quando você estiver ativo no aplicativo',
-          onlineStatus,
-          setOnlineStatus,
+          'onlineStatus',
           CheckCircle
         )}
 
