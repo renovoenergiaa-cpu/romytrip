@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { Upload, ShieldCheck, Sparkles, Plus, Trash2, ChevronLeft } from 'lucide-react-native';
 import { useState, useMemo } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { CustomDatePicker } from '../../../src/components/CustomDatePicker';
+import { BirthDatePicker } from '../../../src/components/BirthDatePicker';
 import { CustomInput } from '../../../src/components/CustomInput';
 import { CityAutocomplete } from '../../../src/components/CityAutocomplete';
 import { ProgressBar } from '../../../src/components/ProgressBar';
@@ -131,16 +131,11 @@ export default function Step1PersonalScreen() {
           <Text style={styles.ageBadgeText}>🔞 Maior de 18 anos</Text>
         </View>
       </View>
-      <View style={{ marginBottom: spacing.xs }}>
-        <CustomDatePicker 
-          value={dob}
-          onChange={(date) => updateField('dob', date)}
-          maximumDate={maxAdultBirthDate}
-          minimumDate={minBirthDate}
-          placeholder="DD/MM/AAAA"
-        />
-      </View>
-      <Text style={styles.helperText}>Exclusivo para viajantes com 18 anos completos ou mais.</Text>
+      <BirthDatePicker 
+        value={dob}
+        onChange={(date) => updateField('dob', date)}
+      />
+      <Text style={styles.helperText}>Informe dia, mês e ano de nascimento (obrigatório 18+ anos).</Text>
 
       {/* Cidade Base */}
       <Text style={styles.label}>Sua cidade base</Text>

@@ -1,7 +1,15 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Platform } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  Platform,
+  Modal,
+} from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Calendar } from 'lucide-react-native';
+import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react-native';
 import { colors, spacing, typography, useTheme } from '../theme';
 
 interface CustomDatePickerProps {
@@ -12,13 +20,12 @@ interface CustomDatePickerProps {
   maximumDate?: Date;
 }
 
-function toYyyyMmDd(date?: Date | null): string {
-  if (!date || isNaN(date.getTime())) return '';
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
+const PT_MONTHS = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+const PT_WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 function formatDateToBr(date?: Date | null): string {
   if (!date || isNaN(date.getTime())) return '';
@@ -45,8 +52,8 @@ export function CustomDatePicker({
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isFocused, setIsFocused] = useState(false);
+  const [webCalendarOpen, setWebCalendarOpen] = useState(false);
   const [nativePickerOpen, setNativePickerOpen] = useState(false);
-  const webDateInputRef = useRef<any>(null);
 
   // Sincroniza se o valor externo mudar
   useEffect(() => {
@@ -67,9 +74,23 @@ export function CustomDatePicker({
     return !isNaN(d.getTime()) ? d : null;
   }, [value]);
 
-  const pickerDate = selectedDate || maximumDate || minimumDate || new Date();
+  const initialViewDate = selectedDate || maximumDate || minimumDate || new Date();
+  const [viewYear, setViewYear] = useState(() => initialViewDate.getFullYear());
+  const [viewMonth, setViewMonth] = useState(() => initialViewDate.getMonth());
 
-  // Tratamento da digitação com máscara DD/MM/AAAA no Web
+  // Atualiza visão do calendário quando abrir
+  const handleOpenCalendar = () => {
+    if (Platform.OS === 'web') {
+      const base = selectedDate || maximumDate || minimumDate || new Date();
+      setViewYear(base.getFullYear());
+      setViewMonth(base.getMonth());
+      setWebCalendarOpen(true);
+    } else {
+      setNativePickerOpen(true);
+    }
+  };
+
+  // Digitação direta no formato DD/MM/AAAA
   const handleTextChange = (text: string) => {
     const digits = text.replace(/\D/g, '').slice(0, 8);
     let formatted = '';
@@ -94,12 +115,12 @@ export function CustomDatePicker({
 
       const d = new Date(year, month - 1, day, 12, 0, 0);
       if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) {
-        setErrorMsg('Data inexistente no calendário');
+        setErrorMsg('Dia inexistente no mês informado');
         return;
       }
 
       if (maximumDate && d > maximumDate) {
-        setErrorMsg('Data posterior ao limite permitido (exige maior de 18 anos)');
+        setErrorMsg('Data posterior ao limite permitido');
         return;
       }
       if (minimumDate && d < minimumDate) {
@@ -114,7 +135,52 @@ export function CustomDatePicker({
     }
   };
 
-  // Handler do DateTimePicker Nativo (Android / iOS)
+  // Navegação do calendário customizado Web
+  const prevMonth = () => {
+    if (viewMonth === 0) {
+      setViewMonth(11);
+      setViewYear((y) => y - 1);
+    } else {
+      setViewMonth((m) => m - 1);
+    }
+  };
+
+  const nextMonth = () => {
+    if (viewMonth === 11) {
+      setViewMonth(0);
+      setViewYear((y) => y + 1);
+    } else {
+      setViewMonth((m) => m + 1);
+    }
+  };
+
+  const handleSelectDay = (dayNum: number) => {
+    const chosen = new Date(viewYear, viewMonth, dayNum, 12, 0, 0);
+    if (minimumDate && chosen < minimumDate) return;
+    if (maximumDate && chosen > maximumDate) return;
+
+    setTextValue(formatDateToBr(chosen));
+    setErrorMsg(null);
+    onChange(chosen.toISOString());
+    setWebCalendarOpen(false);
+  };
+
+  // Geração da grade de dias
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
+
+  const calendarDays = useMemo(() => {
+    const days: (number | null)[] = [];
+    for (let i = 0; i < firstDayOfWeek; i++) {
+      days.push(null);
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      days.push(d);
+    }
+    return days;
+  }, [viewYear, viewMonth, daysInMonth, firstDayOfWeek]);
+
+  // Handler nativo mobile
   const handleNativeDateChange = (event: any, date?: Date) => {
     if (Platform.OS === 'android') {
       setNativePickerOpen(false);
@@ -129,143 +195,182 @@ export function CustomDatePicker({
     }
   };
 
-  // Abrir seletor de calendário
-  const handleOpenPicker = () => {
-    if (Platform.OS === 'web') {
-      if (webDateInputRef.current) {
-        try {
-          if (typeof webDateInputRef.current.showPicker === 'function') {
-            webDateInputRef.current.showPicker();
-          } else {
-            webDateInputRef.current.focus();
-            webDateInputRef.current.click();
-          }
-        } catch {
-          webDateInputRef.current.click();
-        }
-      }
-    } else {
-      setNativePickerOpen(true);
-    }
-  };
-
   return (
     <View style={styles.wrapper}>
-      {Platform.OS === 'web' ? (
-        <View
+      {/* Campo de Entrada */}
+      <View
+        style={[
+          styles.dateInputContainer,
+          {
+            backgroundColor: themeColors.inputBackground,
+            borderColor: errorMsg
+              ? '#EF4444'
+              : isFocused
+              ? themeColors.primary
+              : themeColors.border || 'transparent',
+            borderWidth: 1.5,
+          },
+        ]}
+      >
+        <TextInput
           style={[
-            styles.dateInputContainer,
+            styles.input,
             {
-              backgroundColor: themeColors.inputBackground,
-              borderColor: errorMsg
-                ? '#EF4444'
-                : isFocused
-                ? themeColors.primary
-                : themeColors.border || 'transparent',
-              borderWidth: 1.5,
+              color: themeColors.textPrimary,
+              outlineStyle: 'none' as any,
             },
           ]}
-        >
-          <TextInput
-            style={[
-              styles.input,
-              {
-                color: themeColors.textPrimary,
-                outlineStyle: 'none' as any,
-              },
-            ]}
-            placeholder={placeholder}
-            placeholderTextColor={themeColors.textSecondary}
-            value={textValue}
-            onChangeText={handleTextChange}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            keyboardType="numeric"
-            maxLength={10}
-          />
+          placeholder={placeholder}
+          placeholderTextColor={themeColors.textSecondary}
+          value={textValue}
+          onChangeText={handleTextChange}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          keyboardType="numeric"
+          maxLength={10}
+        />
 
-          <TouchableOpacity
-            style={styles.iconButton}
-            activeOpacity={0.7}
-            onPress={handleOpenPicker}
-            accessibilityLabel="Abrir calendário"
-          >
-            <Calendar size={20} color={themeColors.primary} />
-          </TouchableOpacity>
-
-          {/* Input de data nativo HTML5 invisível no Web com min/max travados */}
-          <input
-            ref={webDateInputRef}
-            type="date"
-            tabIndex={-1}
-            min={minimumDate ? toYyyyMmDd(minimumDate) : '1900-01-01'}
-            max={maximumDate ? toYyyyMmDd(maximumDate) : undefined}
-            value={selectedDate ? toYyyyMmDd(selectedDate) : ''}
-            onChange={(e: any) => {
-              const val = e.target.value; // "YYYY-MM-DD"
-              if (val && val.length === 10) {
-                const [y, m, d] = val.split('-').map(Number);
-                const chosen = new Date(y, m - 1, d, 12, 0, 0);
-                if (maximumDate && chosen > maximumDate) {
-                  setErrorMsg('Idade mínima de 18 anos exigida');
-                  return;
-                }
-                if (minimumDate && chosen < minimumDate) {
-                  setErrorMsg('Data anterior ao limite permitido');
-                  return;
-                }
-                setErrorMsg(null);
-                setTextValue(formatDateToBr(chosen));
-                onChange(chosen.toISOString());
-              }
-            }}
-            style={{
-              position: 'absolute',
-              right: 12,
-              bottom: 8,
-              opacity: 0,
-              width: 32,
-              height: 32,
-              cursor: 'pointer',
-            }}
-          />
-        </View>
-      ) : (
         <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={handleOpenPicker}
-          style={[
-            styles.dateInputContainer,
-            {
-              backgroundColor: themeColors.inputBackground,
-              borderColor: errorMsg ? '#EF4444' : 'transparent',
-              borderWidth: 1,
-            },
-          ]}
+          style={styles.iconButton}
+          activeOpacity={0.7}
+          onPress={handleOpenCalendar}
+          accessibilityLabel="Abrir calendário visual"
         >
-          <Calendar size={20} color={themeColors.primary} style={styles.iconContainer} />
-          <Text
-            style={[
-              styles.input,
-              {
-                color: selectedDate ? themeColors.textPrimary : themeColors.textSecondary,
-                paddingVertical: 14,
-              },
-            ]}
-          >
-            {textValue || placeholder}
-          </Text>
+          <Calendar size={20} color={themeColors.primary} />
         </TouchableOpacity>
-      )}
+      </View>
 
-      {errorMsg ? (
-        <Text style={styles.errorText}>{errorMsg}</Text>
-      ) : null}
+      {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
+
+      {/* Calendário Modal 100% Customizado para Web (Sem mm/dd/yyyy de navegador) */}
+      {Platform.OS === 'web' && (
+        <Modal
+          visible={webCalendarOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setWebCalendarOpen(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setWebCalendarOpen(false)}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              style={[
+                styles.calendarCard,
+                {
+                  backgroundColor: themeColors.card || '#181820',
+                  borderColor: themeColors.border || '#333',
+                },
+              ]}
+              onPress={(e) => e.stopPropagation()}
+            >
+              {/* Cabeçalho do Calendário */}
+              <View style={styles.calendarHeader}>
+                <TouchableOpacity
+                  onPress={prevMonth}
+                  style={styles.navArrow}
+                  activeOpacity={0.7}
+                >
+                  <ChevronLeft size={20} color={themeColors.textPrimary} />
+                </TouchableOpacity>
+
+                <Text style={[styles.headerTitle, { color: themeColors.textPrimary }]}>
+                  {PT_MONTHS[viewMonth]} {viewYear}
+                </Text>
+
+                <TouchableOpacity
+                  onPress={nextMonth}
+                  style={styles.navArrow}
+                  activeOpacity={0.7}
+                >
+                  <ChevronRight size={20} color={themeColors.textPrimary} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setWebCalendarOpen(false)}
+                  style={styles.closeBtn}
+                  activeOpacity={0.7}
+                >
+                  <X size={18} color={themeColors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Dias da Semana */}
+              <View style={styles.weekdayRow}>
+                {PT_WEEKDAYS.map((wd, i) => (
+                  <Text key={i} style={styles.weekdayText}>
+                    {wd}
+                  </Text>
+                ))}
+              </View>
+
+              {/* Grade de Dias */}
+              <View style={styles.daysGrid}>
+                {calendarDays.map((dayNum, idx) => {
+                  if (!dayNum) {
+                    return <View key={`empty-${idx}`} style={styles.dayCellEmpty} />;
+                  }
+
+                  const cellDate = new Date(viewYear, viewMonth, dayNum, 12, 0, 0);
+                  const isPastMin = minimumDate && cellDate < minimumDate;
+                  const isFutureMax = maximumDate && cellDate > maximumDate;
+                  const isDisabled = Boolean(isPastMin || isFutureMax);
+
+                  const isSelected =
+                    selectedDate &&
+                    selectedDate.getFullYear() === viewYear &&
+                    selectedDate.getMonth() === viewMonth &&
+                    selectedDate.getDate() === dayNum;
+
+                  return (
+                    <TouchableOpacity
+                      key={`day-${dayNum}`}
+                      style={[
+                        styles.dayCell,
+                        isSelected && { backgroundColor: colors.primary },
+                        isDisabled && styles.dayCellDisabled,
+                      ]}
+                      disabled={isDisabled}
+                      activeOpacity={0.7}
+                      onPress={() => handleSelectDay(dayNum)}
+                    >
+                      <Text
+                        style={[
+                          styles.dayText,
+                          {
+                            color: isSelected
+                              ? '#FFFFFF'
+                              : isDisabled
+                              ? '#555566'
+                              : themeColors.textPrimary,
+                            fontWeight: isSelected ? '700' : '500',
+                          },
+                        ]}
+                      >
+                        {dayNum}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Rodapé informativo */}
+              <View style={styles.calendarFooter}>
+                <Text style={styles.footerHint}>
+                  Toque em um dia para selecionar no formato DD/MM/AAAA
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+      )}
 
       {/* Picker Nativo Mobile */}
       {Platform.OS !== 'web' && nativePickerOpen && (
         <DateTimePicker
-          value={pickerDate}
+          value={initialViewDate}
           mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={handleNativeDateChange}
@@ -298,9 +403,6 @@ const styles = StyleSheet.create({
     height: 52,
     position: 'relative',
   },
-  iconContainer: {
-    marginRight: spacing.sm,
-  },
   iconButton: {
     padding: 6,
     justifyContent: 'center',
@@ -318,6 +420,97 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
     marginLeft: 4,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  calendarCard: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  navArrow: {
+    padding: 6,
+    borderRadius: 8,
+  },
+  headerTitle: {
+    ...typography.h3,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  closeBtn: {
+    padding: 6,
+    marginLeft: 6,
+  },
+  weekdayRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    paddingBottom: 6,
+  },
+  weekdayText: {
+    ...typography.caption,
+    width: 38,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  daysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  dayCellEmpty: {
+    width: 38,
+    height: 38,
+    marginVertical: 2,
+  },
+  dayCell: {
+    width: 38,
+    height: 38,
+    marginVertical: 2,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dayCellDisabled: {
+    opacity: 0.25,
+  },
+  dayText: {
+    fontSize: 14,
+  },
+  calendarFooter: {
+    marginTop: 12,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.06)',
+    alignItems: 'center',
+  },
+  footerHint: {
+    ...typography.caption,
+    fontSize: 11,
+    color: colors.textSecondary,
   },
   iosDoneButton: {
     padding: spacing.md,
