@@ -46,9 +46,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsProfileComplete(null);
       return false;
     }
-    const complete = await checkProfileComplete(currentSession.user.id);
-    setIsProfileComplete(complete);
-    return complete;
+    try {
+      const checkPromise = checkProfileComplete(currentSession.user.id);
+      const timeoutPromise = new Promise<boolean>((res) => setTimeout(() => res(false), 2000));
+      const complete = await Promise.race([checkPromise, timeoutPromise]);
+      setIsProfileComplete(complete);
+      return complete;
+    } catch {
+      setIsProfileComplete(false);
+      return false;
+    }
   }, []);
 
   const refreshProfile = useCallback(async (): Promise<boolean> => {
@@ -60,7 +67,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Timeout de segurança: garante no máximo 1400ms de loading inicial
     const timer = setTimeout(() => {
-      if (isMounted) setIsLoading(false);
+      if (isMounted) {
+        setIsLoading(false);
+        setIsProfileComplete((prev) => (prev === null ? false : prev));
+      }
     }, 1400);
 
     // Se estiver no Web e houver ?code= na URL (retorno de OAuth PKCE do Google)
