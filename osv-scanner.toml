@@ -1,0 +1,16 @@
+# OSV-Scanner configuration for Romy project
+# Documentation: https://google.github.io/osv-scanner/configuration/
+
+# image-size is a build-time dependency used internally by React Native's Metro bundler (metro@0.83.3)
+# to calculate dimensions of local static image assets during bundle compilation.
+# It does NOT run in runtime production and never processes untrusted user uploads.
+# Upstream image-size 2.x contains breaking changes incompatible with Metro's buffer API,
+# and no 1.x backport exists from upstream.
+
+[[IgnoredVulns]]
+id = "GHSA-5p2g-fcmc-qvqq"
+reason = "Build-time only dependency in Metro bundler for local static asset dimension resolution. Not exposed to runtime user input."
+
+[[IgnoredVulns]]
+id = "GHSA-w3rx-r6r6-pgpr"
+reason = "Build-time only dependency in Metro bundler for local static asset dimension resolution. Not exposed to runtime user input."

@@ -63,5 +63,16 @@
     "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"
   },
+  "overrides": {
+    "decode-uri-component": "^0.5.0",
+    "postcss": "^8.5.23",
+    "uuid": "^11.1.1",
+    "metro": {
+      "ws": "^7.5.11"
+    },
+    "react-devtools-core": {
+      "ws": "^7.5.11"
+    }
+  },
   "private": true
 }
