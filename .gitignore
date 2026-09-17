@@ -43,3 +43,8 @@ app-example
 # generated native folders
 /ios
 /android
+
+# security scan reports
+zap-report.*
+zap.yaml
+
