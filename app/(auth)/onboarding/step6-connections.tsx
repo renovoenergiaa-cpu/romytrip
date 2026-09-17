@@ -72,6 +72,27 @@ export default function Step6ConnectionsScreen() {
       } catch (e) {}
     }
 
+    // 🔒 SEGURANÇA: Bloqueio definitivo na gravação para menores de 18 anos
+    if (parsedDob) {
+      const birthDate = new Date(parsedDob);
+      const todayDate = new Date();
+      let age = todayDate.getFullYear() - birthDate.getFullYear();
+      const monthDiff = todayDate.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && todayDate.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      if (age < 18) {
+        const msg = 'O Romy é exclusivo para maiores de 18 anos. Cadastro proibido para menores de idade.';
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          window.alert(`Cadastro Proibido: ${msg}`);
+        } else {
+          Alert.alert('Cadastro Proibido', msg);
+        }
+        setLoading(false);
+        return;
+      }
+    }
+
     let parsedCheckIn = null;
     if (state.checkIn) {
       try {

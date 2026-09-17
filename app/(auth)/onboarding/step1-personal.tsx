@@ -15,15 +15,58 @@ export default function Step1PersonalScreen() {
   const router = useRouter();
   const { name, dob, city, sex, photos, bio, updateField } = useOnboardingStore();
   
-  const today = useMemo(() => new Date(), []);
+  // Função para cálculo exato de idade
+  const calculateAge = (dobString: string): number => {
+    if (!dobString) return 0;
+    const birthDate = new Date(dobString);
+    if (isNaN(birthDate.getTime())) return 0;
+    const todayDate = new Date();
+    let calculatedAge = todayDate.getFullYear() - birthDate.getFullYear();
+    const monthDiff = todayDate.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && todayDate.getDate() < birthDate.getDate())) {
+      calculatedAge--;
+    }
+    return calculatedAge;
+  };
+
+  // Trava de maioridade: máximo de hoje menos 18 anos
+  const maxAdultBirthDate = useMemo(() => {
+    const d = new Date();
+    return new Date(d.getFullYear() - 18, d.getMonth(), d.getDate(), 12, 0, 0);
+  }, []);
+  const minBirthDate = useMemo(() => new Date(1900, 0, 1, 12, 0, 0), []);
   
   const handleNext = () => {
     if (!name?.trim() || !dob || !city?.trim() || !sex) {
-      Alert.alert('Aviso', 'Preencha seu nome, data de nascimento, cidade base e gênero para continuar.');
+      const msg = 'Preencha seu nome, data de nascimento, cidade base e gênero para continuar.';
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.alert(`Aviso: ${msg}`);
+      } else {
+        Alert.alert('Aviso', msg);
+      }
       return;
     }
+
+    // 🔒 SEGURANÇA & CONFORMIDADE: Bloqueio estrito de cadastro para menores de 18 anos
+    const age = calculateAge(dob);
+    if (age < 18) {
+      const title = 'Cadastro Proibido para Menores';
+      const msg = 'O Romy é uma comunidade exclusiva para maiores de 18 anos. Menores de idade não podem criar uma conta.';
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.alert(`${title}: ${msg}`);
+      } else {
+        Alert.alert(title, msg);
+      }
+      return;
+    }
+
     if (!photos || photos.length === 0 || !photos[0]) {
-      Alert.alert('Foto Obrigatória', 'Adicione pelo menos uma foto sua para que seus futuros companheiros de viagem te reconheçam.');
+      const msg = 'Adicione pelo menos uma foto sua para que seus futuros companheiros de viagem te reconheçam.';
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.alert(`Foto Obrigatória: ${msg}`);
+      } else {
+        Alert.alert('Foto Obrigatória', msg);
+      }
       return;
     }
     router.push('/(auth)/onboarding/step2-trip');
@@ -82,14 +125,22 @@ export default function Step1PersonalScreen() {
       />
       
       {/* Data de Nascimento */}
-      <Text style={styles.label}>Data de nascimento</Text>
-      <View style={{ marginBottom: spacing.md }}>
+      <View style={styles.dobLabelRow}>
+        <Text style={styles.label}>Data de nascimento</Text>
+        <View style={styles.ageBadge}>
+          <Text style={styles.ageBadgeText}>🔞 Maior de 18 anos</Text>
+        </View>
+      </View>
+      <View style={{ marginBottom: spacing.xs }}>
         <CustomDatePicker 
           value={dob}
           onChange={(date) => updateField('dob', date)}
-          maximumDate={today}
+          maximumDate={maxAdultBirthDate}
+          minimumDate={minBirthDate}
+          placeholder="DD/MM/AAAA"
         />
       </View>
+      <Text style={styles.helperText}>Exclusivo para viajantes com 18 anos completos ou mais.</Text>
 
       {/* Cidade Base */}
       <Text style={styles.label}>Sua cidade base</Text>
@@ -361,5 +412,24 @@ const styles = StyleSheet.create({
     ...typography.body,
     fontWeight: '700',
     fontSize: 15,
+  },
+  dobLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  ageBadge: {
+    backgroundColor: 'rgba(99, 56, 250, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(99, 56, 250, 0.3)',
+  },
+  ageBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
   },
 });
