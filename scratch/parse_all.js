@@ -48,7 +48,7 @@ async function run() {
       console.log(`   ${depH}:${depM} -> ${arrH}:${arrM} (${durMins}m, ${stops})`);
       console.log(`   Preço: R$ ${price} | Token: ${bookingToken?.slice(0, 30)}...`);
     } catch (e) {
-      console.log(`Error parsing flight ${idx + 1}:`, e.message);
+      console.log('Error parsing flight %d: %s', idx + 1, e.message);
     }
   });
 }

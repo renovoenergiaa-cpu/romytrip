@@ -14,13 +14,13 @@ async function run() {
   const flight = data[2][0][0][0]; // first best flight
   console.log('Flight 0 keys/values:');
   flight.forEach((v, i) => {
-    console.log(`[${i}] =`, JSON.stringify(v)?.slice(0, 100));
+    console.log('[%s] =', String(i), JSON.stringify(v)?.slice(0, 100));
   });
   
   const seg0 = flight[2][0];
   console.log('\nSegment 0 keys/values:');
   seg0.forEach((v, i) => {
-    console.log(`seg[${i}] =`, JSON.stringify(v)?.slice(0, 100));
+    console.log('seg[%s] =', String(i), JSON.stringify(v)?.slice(0, 100));
   });
 }
 
