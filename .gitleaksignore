@@ -1,0 +1,10 @@
+# Gitleaks ignore file for historical commits and public anon keys
+b093ba8fb6f9ac1d8fc26d4291cfdfb5a66a95c4:src/lib/supabase.ts:jwt:18
+704c7b25c2b35118e76f88b747569eb6b0a6b668:src/lib/supabase.ts:jwt:10
+5cc5156fda388e444db4a09b06281b8cccecf829:.env:duffel-api-token:9
+5cc5156fda388e444db4a09b06281b8cccecf829:.env:jwt:2
+5cc5156fda388e444db4a09b06281b8cccecf829:.env:generic-api-key:3
+df389bb91639505c8bfe19f2b63b3961ed568dca:scratch/test_duffel.js:duffel-api-token:1
+df389bb91639505c8bfe19f2b63b3961ed568dca:scratch/test_duffel_links.js:duffel-api-token:1
+df389bb91639505c8bfe19f2b63b3961ed568dca:scratch/test_routes.js:duffel-api-token:1
+df389bb91639505c8bfe19f2b63b3961ed568dca:test_query.js:jwt:4

@@ -1,0 +1,10 @@
+# Gitleaks configuration for Romy project
+# Documentation: https://github.com/gitleaks/gitleaks
+
+[allowlist]
+description = "Ignore local developer-only environment file and build directories"
+paths = [
+  '''^\.env$''',
+  '''^\.env\..*$''',
+  '''^dist\/.*$''',
+]

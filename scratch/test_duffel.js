@@ -1,4 +1,4 @@
-const token = 'duffel_test_kO0RwadYDWJV79oavGF_phWe0MMfJYt0BZi7UjssPn_';
+const token = process.env.EXPO_PUBLIC_DUFFEL_ACCESS_TOKEN || '';
 
 async function test() {
   try {
