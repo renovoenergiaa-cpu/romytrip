@@ -9,7 +9,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "build": "expo export -p web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "postinstall": "node ./scripts/patch-image-size.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -64,6 +65,7 @@
     "typescript": "~5.9.2"
   },
   "overrides": {
+    "image-size": "2.0.4",
     "decode-uri-component": "^0.5.0",
     "postcss": "^8.5.23",
     "uuid": "^11.1.1",
