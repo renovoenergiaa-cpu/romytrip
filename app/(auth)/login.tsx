@@ -36,14 +36,9 @@ export default function LoginScreen() {
   const [isSigningUp, setIsSigningUp] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
-  // Redireciona declarativamente se autenticado
-  if (session && !isSigningUp) {
-    if (isProfileComplete === false) {
-      return <Redirect href="/(auth)/onboarding/step1-personal" />;
-    }
-    if (isProfileComplete === true) {
-      return <Redirect href="/(tabs)" />;
-    }
+  // Redireciona declarativamente se autenticado com perfil completo
+  if (session && !isSigningUp && isProfileComplete === true) {
+    return <Redirect href="/(tabs)" />;
   }
 
   const showAlert = (title: string, message: string) => {
@@ -294,6 +289,39 @@ export default function LoginScreen() {
                   : 'Monte seu perfil e encontre companhias de viagem reais'}
               </Text>
             </View>
+
+            {/* Aviso de Cadastro em Andamento com Opção de Trocar de E-mail */}
+            {session && isProfileComplete === false && (
+              <View style={styles.resumeCard}>
+                <Text style={styles.resumeText}>
+                  Há um cadastro em andamento com:
+                </Text>
+                <Text style={styles.resumeEmail}>
+                  {session.user?.email}
+                </Text>
+                <View style={styles.resumeBtnRow}>
+                  <TouchableOpacity
+                    style={styles.resumePrimaryBtn}
+                    onPress={() => router.push('/(auth)/onboarding/step1-personal')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.resumePrimaryBtnText}>Continuar Cadastro →</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.resumeSecondaryBtn}
+                    onPress={async () => {
+                      try {
+                        await supabase.auth.signOut();
+                      } catch (e) {}
+                      resetOnboarding();
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.resumeSecondaryBtnText}>Sair / Trocar E-mail</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             {/* Alternador de Modo (Abas) */}
             <View style={styles.tabContainer}>
@@ -701,5 +729,61 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontWeight: '700',
     fontSize: 15,
+  },
+  resumeCard: {
+    backgroundColor: 'rgba(99, 56, 250, 0.08)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(99, 56, 250, 0.25)',
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    alignItems: 'center',
+  },
+  resumeText: {
+    ...typography.caption,
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  resumeEmail: {
+    ...typography.body,
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primary,
+    marginTop: 2,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  resumeBtnRow: {
+    flexDirection: 'row',
+    gap: 8,
+    width: '100%',
+    justifyContent: 'center',
+  },
+  resumePrimaryBtn: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  resumePrimaryBtnText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  resumeSecondaryBtn: {
+    flex: 1,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+  },
+  resumeSecondaryBtnText: {
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

@@ -10,10 +10,21 @@ import { ProgressBar } from '../../../src/components/ProgressBar';
 import { Chip } from '../../../src/components/Chip';
 import { useOnboardingStore } from '../../../src/store/onboardingStore';
 import { colors, spacing, typography } from '../../../src/theme';
+import { supabase } from '../../../src/lib/supabase';
 
 export default function Step1PersonalScreen() {
   const router = useRouter();
-  const { name, dob, city, sex, photos, bio, updateField } = useOnboardingStore();
+  const { name, dob, city, sex, photos, bio, updateField, reset: resetOnboarding } = useOnboardingStore();
+
+  const handleCancelOnboarding = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn('Erro ao encerrar sessão:', e);
+    }
+    resetOnboarding();
+    router.replace('/(auth)/login');
+  };
   
   // Função para cálculo exato de idade
   const calculateAge = (dobString: string): number => {
@@ -100,11 +111,13 @@ export default function Step1PersonalScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.topNav}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.replace('/(auth)/login')}>
+        <TouchableOpacity style={styles.backBtn} onPress={handleCancelOnboarding} accessibilityLabel="Voltar ao login">
           <ChevronLeft size={22} color={colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.stepBadge}>Passo 1 de 6</Text>
-        <View style={{ width: 32 }} />
+        <TouchableOpacity style={styles.cancelBtn} onPress={handleCancelOnboarding} activeOpacity={0.7}>
+          <Text style={styles.cancelBtnText}>Desistir</Text>
+        </TouchableOpacity>
       </View>
 
       <ProgressBar totalSteps={6} currentStep={1} />
@@ -219,6 +232,16 @@ export default function Step1PersonalScreen() {
 
       <TouchableOpacity style={styles.button} onPress={handleNext} activeOpacity={0.85}>
         <Text style={styles.buttonText}>Continuar para Próxima Viagem →</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={styles.cancelLinkWrapper} 
+        onPress={handleCancelOnboarding}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.cancelLinkText}>
+          Colocou o e-mail errado? <Text style={styles.cancelLinkHighlight}>Desistir e voltar ao login</Text>
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -426,5 +449,32 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: colors.primary,
+  },
+  cancelBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+  },
+  cancelBtnText: {
+    color: '#EF4444',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  cancelLinkWrapper: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginTop: -8,
+    marginBottom: spacing.xl,
+  },
+  cancelLinkText: {
+    ...typography.caption,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  cancelLinkHighlight: {
+    color: colors.primary,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
 });
