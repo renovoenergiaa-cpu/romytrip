@@ -34,6 +34,7 @@ import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, FadeInDown, Layout } from 'react-native-reanimated';
 import { CityAutocomplete } from './CityAutocomplete';
 import * as WebBrowser from 'expo-web-browser';
+import { useTheme } from '../theme';
 import {
   searchRealFlights,
   FlightResult,
@@ -83,6 +84,8 @@ const getInitialFlightDates = () => {
 };
 
 export default function ProximaViagemScreen() {
+  const { colors, isDark } = useTheme();
+  const s = getStyles(colors, isDark);
   const [screenState, setScreenState] = useState<'search' | 'loading' | 'results'>('search');
   const [tripType, setTripType] = useState<'round' | 'oneway'>('round');
   const [origin, setOrigin] = useState('São Paulo, Brasil');
@@ -447,7 +450,7 @@ export default function ProximaViagemScreen() {
                 value={origin}
                 onChangeText={setOrigin}
                 placeholder="De onde você vai partir? (ex: São Paulo, GRU)"
-                darkTheme={true}
+                darkTheme={isDark}
               />
             </View>
 
@@ -458,7 +461,7 @@ export default function ProximaViagemScreen() {
                 value={destination}
                 onChangeText={setDestination}
                 placeholder="Para onde você quer ir? (ex: Rio de Janeiro, Miami, Lisboa)"
-                darkTheme={true}
+                darkTheme={isDark}
               />
             </View>
 
@@ -645,7 +648,7 @@ export default function ProximaViagemScreen() {
               }}
               activeOpacity={0.8}
             >
-              <ChevronLeft size={20} color="#FFF" />
+              <ChevronLeft size={20} color={isDark ? '#FFF' : colors.textPrimary} />
               <Text style={s.backText}>Voltar</Text>
             </TouchableOpacity>
 
@@ -859,7 +862,7 @@ export default function ProximaViagemScreen() {
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setOptionsModalFlight(null)} style={s.modalCloseBtn}>
-                <X size={18} color="#FFF" />
+                <X size={18} color={isDark ? '#FFF' : colors.textPrimary} />
               </TouchableOpacity>
             </View>
 
@@ -982,7 +985,21 @@ export default function ProximaViagemScreen() {
 }
 
 // ─── Stylesheet ──────────────────────────────────────────────────────────────
-const s = StyleSheet.create({
+const getStyles = (colors: any, isDark: boolean) => {
+  const BG             = isDark ? '#0A0A0C' : colors.background;
+  const CARD           = isDark ? '#141416' : colors.card;
+  const CARD_INNER     = isDark ? '#111114' : colors.surface;
+  const BORDER         = isDark ? '#222226' : colors.border;
+  const BORDER_SUBTLE  = isDark ? '#2A2A30' : colors.border;
+  const MUTED          = isDark ? '#A1A1AA' : colors.textSecondary;
+  const TEXT           = isDark ? '#FFFFFF' : colors.textPrimary;
+  const PRIMARY        = '#6338FA';
+  const PRIMARY_DIM    = isDark ? 'rgba(99, 56, 250, 0.14)' : 'rgba(99, 56, 250, 0.08)';
+  const PRIMARY_BORDER = isDark ? 'rgba(99, 56, 250, 0.3)' : 'rgba(99, 56, 250, 0.2)';
+  const GREEN          = '#22C55E';
+  const GREEN_DIM      = 'rgba(34, 197, 94, 0.12)';
+
+  return StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: BG,
@@ -1026,7 +1043,7 @@ const s = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#FFF',
+    color: TEXT,
     letterSpacing: -0.4,
     marginBottom: 4,
   },
@@ -1134,7 +1151,7 @@ const s = StyleSheet.create({
   dateInput: {
     flex: 1,
     fontSize: 14,
-    color: '#FFF',
+    color: TEXT,
     fontWeight: '600',
     padding: 0,
   },
@@ -1147,7 +1164,7 @@ const s = StyleSheet.create({
     flexWrap: 'wrap',
   },
   quickDateChip: {
-    backgroundColor: '#18181C',
+    backgroundColor: CARD_INNER,
     borderWidth: 1,
     borderColor: BORDER_SUBTLE,
     paddingHorizontal: 10,
@@ -1190,7 +1207,7 @@ const s = StyleSheet.create({
   switchTitle: {
     fontSize: 13.5,
     fontWeight: '700',
-    color: '#FFF',
+    color: TEXT,
   },
   switchSubtitle: {
     fontSize: 11.5,
@@ -1229,7 +1246,7 @@ const s = StyleSheet.create({
   counterValue: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#FFF',
+    color: TEXT,
   },
   classButton: {
     backgroundColor: CARD_INNER,
@@ -1243,7 +1260,7 @@ const s = StyleSheet.create({
   classButtonText: {
     fontSize: 13.5,
     fontWeight: '700',
-    color: '#FFF',
+    color: TEXT,
   },
 
   // Search button
@@ -1303,7 +1320,7 @@ const s = StyleSheet.create({
   loadingTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#FFF',
+    color: TEXT,
     marginBottom: 6,
   },
   loadingSub: {
@@ -1337,7 +1354,7 @@ const s = StyleSheet.create({
   backText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#FFF',
+    color: TEXT,
     marginLeft: 2,
   },
   summaryBox: {
@@ -1350,7 +1367,7 @@ const s = StyleSheet.create({
   summaryAirport: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#FFF',
+    color: TEXT,
     letterSpacing: 0.5,
   },
   summaryTypeBadge: {
@@ -1374,7 +1391,7 @@ const s = StyleSheet.create({
 
   // Flexible Date Grid
   gridContainer: {
-    backgroundColor: '#0E0E11',
+    backgroundColor: CARD_INNER,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
     paddingVertical: 12,
@@ -1430,7 +1447,7 @@ const s = StyleSheet.create({
   gridPrice: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#FFF',
+    color: TEXT,
   },
   gridTextSelected: {
     color: '#FFF',
@@ -1532,7 +1549,7 @@ const s = StyleSheet.create({
   airlineName: {
     fontSize: 14.5,
     fontWeight: '700',
-    color: '#FFF',
+    color: TEXT,
   },
   flightSubInfo: {
     flexDirection: 'row',
@@ -1561,7 +1578,7 @@ const s = StyleSheet.create({
   flightPrice: {
     fontSize: 19,
     fontWeight: '800',
-    color: '#FFF',
+    color: TEXT,
     letterSpacing: -0.3,
   },
   flightSecondaryPrice: {
@@ -1590,7 +1607,7 @@ const s = StyleSheet.create({
   timeText: {
     fontSize: 19,
     fontWeight: '800',
-    color: '#FFF',
+    color: TEXT,
     letterSpacing: -0.3,
   },
   airportCode: {
@@ -1677,7 +1694,7 @@ const s = StyleSheet.create({
   },
   optionsBtn: {
     flex: 0.6,
-    backgroundColor: '#18181D',
+    backgroundColor: CARD_INNER,
     borderWidth: 1,
     borderColor: BORDER_SUBTLE,
     borderRadius: 14,
@@ -1698,7 +1715,7 @@ const s = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalSheet: {
-    backgroundColor: '#16161A',
+    backgroundColor: CARD,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
@@ -1714,7 +1731,7 @@ const s = StyleSheet.create({
   modalTitle: {
     fontSize: 17,
     fontWeight: '800',
-    color: '#FFF',
+    color: TEXT,
   },
   modalSubtitle: {
     fontSize: 13,
@@ -1747,14 +1764,14 @@ const s = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: '#1F1F26',
+    backgroundColor: PRIMARY_DIM,
     justifyContent: 'center',
     alignItems: 'center',
   },
   optionItemTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFF',
+    color: TEXT,
   },
   optionItemSub: {
     fontSize: 11.5,
@@ -1782,7 +1799,7 @@ const s = StyleSheet.create({
   noFlightsTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFF',
+    color: TEXT,
     marginBottom: 4,
   },
   noFlightsSub: {
@@ -1791,4 +1808,5 @@ const s = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
   },
-});
+  });
+};

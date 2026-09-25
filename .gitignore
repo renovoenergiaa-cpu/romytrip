@@ -57,5 +57,6 @@ graphify-out/.graphify_analysis.json
 # Temporary tools & QR codes
 supabase/.temp/
 qr_*.png
+scratch/
 
 

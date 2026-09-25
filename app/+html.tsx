@@ -27,7 +27,7 @@ html, body {
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
-  background-color: #0A0A0A;
+  background-color: transparent;
 }
 #root {
   display: flex;

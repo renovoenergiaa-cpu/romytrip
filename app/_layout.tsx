@@ -4,10 +4,11 @@ import { useState, Component } from 'react';
 import { AuthProvider } from '../src/context/AuthContext';
 import { View, Text, ScrollView } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { colors } from '../src/theme';
+import { useTheme } from '../src/theme';
 import { GlobalNotificationProvider } from '../src/context/GlobalNotificationContext';
 import { IncomingCallBanner } from '../src/components/IncomingCallBanner';
 import { InAppMessageBanner } from '../src/components/InAppMessageBanner';
+import { StatusBar } from 'expo-status-bar';
 
 // Captura erros silenciosos e exibe a mensagem — essencial para depurar tela branca no web
 class ErrorBoundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -71,10 +72,12 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
 export default function RootLayout() {
   const [queryClient] = useState(() => new QueryClient());
+  const { isDark } = useTheme();
 
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <GlobalNotificationProvider>

@@ -11,7 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useFeed, usePostLikes, useTogglePostLike, useCreatePost, useComments, useCreateComment, useDeleteFeedPost, useUpdatePostCaption } from '../../src/hooks/useFeed';
 import { useOnboardingStore } from '../../src/store/onboardingStore';
-import { colors, spacing, typography } from '../../src/theme';
+import { colors, spacing, typography, useTheme } from '../../src/theme';
 import { useCurrentUserId } from '../../src/hooks/useMessenger';
 import { EmptyState } from '../../src/components/EmptyState';
 
@@ -41,6 +41,7 @@ interface ITunesSong {
 
 export default function RomyFeedScreen() {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<'aqui' | 'rolando' | 'comunidades' | 'proximo' | 'ajudinha'>('aqui');
   const { destination: userNextDestination } = useOnboardingStore();
   
@@ -579,11 +580,23 @@ export default function RomyFeedScreen() {
     );
   };
 
+  const isPhotoOrMap = activeTab === 'aqui' || activeTab === 'rolando';
+  const tabInactiveColor = isPhotoOrMap ? 'rgba(255,255,255,0.65)' : (isDark ? 'rgba(255,255,255,0.6)' : colors.textSecondary);
+  const tabActiveColor = isPhotoOrMap ? '#FFFFFF' : (isDark ? '#FFFFFF' : colors.textPrimary);
+  const underlineColor = isPhotoOrMap ? '#FFFFFF' : colors.primary;
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: isPhotoOrMap ? '#000' : colors.background }]}>
       
       <SafeAreaView style={styles.safeAreaAbsolute}>
-        <View style={styles.topNavWrapper}>
+        <View style={[
+          styles.topNavWrapper,
+          !isPhotoOrMap && {
+            backgroundColor: colors.background,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: colors.border,
+          }
+        ]}>
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false} 
@@ -598,8 +611,8 @@ export default function RomyFeedScreen() {
                 setActiveTab('aqui');
               }}
             >
-              <Text style={[styles.tabText, activeTab === 'aqui' && styles.tabTextActive]}>Estou aqui</Text>
-              {activeTab === 'aqui' && <View style={styles.tabUnderline} />}
+              <Text style={[styles.tabText, { color: activeTab === 'aqui' ? tabActiveColor : tabInactiveColor }, !isPhotoOrMap && { textShadowRadius: 0 }, activeTab === 'aqui' && styles.tabTextActive]}>Estou aqui</Text>
+              {activeTab === 'aqui' && <View style={[styles.tabUnderline, { backgroundColor: underlineColor }]} />}
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -610,8 +623,8 @@ export default function RomyFeedScreen() {
                 setActiveTab('rolando');
               }}
             >
-              <Text style={[styles.tabText, activeTab === 'rolando' && styles.tabTextActive]}>Tá rolando</Text>
-              {activeTab === 'rolando' && <View style={styles.tabUnderline} />}
+              <Text style={[styles.tabText, { color: activeTab === 'rolando' ? tabActiveColor : tabInactiveColor }, !isPhotoOrMap && { textShadowRadius: 0 }, activeTab === 'rolando' && styles.tabTextActive]}>Tá rolando</Text>
+              {activeTab === 'rolando' && <View style={[styles.tabUnderline, { backgroundColor: underlineColor }]} />}
             </TouchableOpacity>
 
             <TouchableOpacity 
@@ -622,8 +635,8 @@ export default function RomyFeedScreen() {
                 setActiveTab('comunidades');
               }}
             >
-              <Text style={[styles.tabText, activeTab === 'comunidades' && styles.tabTextActive]}>Comunidades</Text>
-              {activeTab === 'comunidades' && <View style={styles.tabUnderline} />}
+              <Text style={[styles.tabText, { color: activeTab === 'comunidades' ? tabActiveColor : tabInactiveColor }, !isPhotoOrMap && { textShadowRadius: 0 }, activeTab === 'comunidades' && styles.tabTextActive]}>Comunidades</Text>
+              {activeTab === 'comunidades' && <View style={[styles.tabUnderline, { backgroundColor: underlineColor }]} />}
             </TouchableOpacity>
 
             <TouchableOpacity 
@@ -634,8 +647,8 @@ export default function RomyFeedScreen() {
                 setActiveTab('ajudinha');
               }}
             >
-              <Text style={[styles.tabText, activeTab === 'ajudinha' && styles.tabTextActive]}>Ajudinha</Text>
-              {activeTab === 'ajudinha' && <View style={styles.tabUnderline} />}
+              <Text style={[styles.tabText, { color: activeTab === 'ajudinha' ? tabActiveColor : tabInactiveColor }, !isPhotoOrMap && { textShadowRadius: 0 }, activeTab === 'ajudinha' && styles.tabTextActive]}>Ajudinha</Text>
+              {activeTab === 'ajudinha' && <View style={[styles.tabUnderline, { backgroundColor: underlineColor }]} />}
             </TouchableOpacity>
 
             <TouchableOpacity 
@@ -646,8 +659,8 @@ export default function RomyFeedScreen() {
                 setActiveTab('proximo');
               }}
             >
-              <Text style={[styles.tabText, activeTab === 'proximo' && styles.tabTextActive]}>Próxima</Text>
-              {activeTab === 'proximo' && <View style={styles.tabUnderline} />}
+              <Text style={[styles.tabText, { color: activeTab === 'proximo' ? tabActiveColor : tabInactiveColor }, !isPhotoOrMap && { textShadowRadius: 0 }, activeTab === 'proximo' && styles.tabTextActive]}>Próxima</Text>
+              {activeTab === 'proximo' && <View style={[styles.tabUnderline, { backgroundColor: underlineColor }]} />}
             </TouchableOpacity>
           </ScrollView>
         </View>
@@ -766,15 +779,17 @@ export default function RomyFeedScreen() {
           )}
         </View>
       ) : activeTab === 'comunidades' ? (
-        <View style={{ flex: 1, backgroundColor: '#000', paddingTop: Platform.OS === 'android' ? 100 : 90 }}>
+        <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? 100 : 90 }}>
           <CommunitiesScreen />
         </View>
       ) : activeTab === 'ajudinha' ? (
-        <View style={{ flex: 1, backgroundColor: '#000', paddingTop: Platform.OS === 'android' ? 100 : 90 }}>
+        <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? 100 : 90 }}>
           <HelpBoardScreen isEmbedded={true} />
         </View>
       ) : (
-        <ProximaViagemScreen />
+        <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? 100 : 90 }}>
+          <ProximaViagemScreen />
+        </View>
       )}
 
       {/* Comments Modal */}
@@ -1204,7 +1219,6 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     fontWeight: '700',
-    color: '#FFFFFF',
   },
   tabUnderline: {
     height: 2,

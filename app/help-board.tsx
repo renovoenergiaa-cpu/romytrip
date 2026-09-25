@@ -41,6 +41,7 @@ import {
   useDeleteHelpRequest,
 } from '../src/hooks/useDiscovery';
 import { supabase } from '../src/lib/supabase';
+import { useTheme } from '../src/theme';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const BG          = '#0A0A0C';
@@ -76,6 +77,8 @@ const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1506794778202-cad84cf4
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function HelpBoardScreen({ isEmbedded }: { isEmbedded?: boolean }) {
   const router = useRouter();
+  const { colors, isDark } = useTheme();
+  const s = getStyles(colors, isDark);
   const [filter, setFilter]                     = useState<'all' | 'active' | 'resolved'>('all');
   const [modalVisible, setModalVisible]         = useState(false);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
@@ -118,7 +121,7 @@ export default function HelpBoardScreen({ isEmbedded }: { isEmbedded?: boolean }
       {!isEmbedded && (
         <View style={s.standaloneHeader}>
           <TouchableOpacity onPress={() => router.back()} style={s.backBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <ArrowLeft size={22} color="#FFF" />
+            <ArrowLeft size={22} color={isDark ? '#FFF' : colors.textPrimary} />
           </TouchableOpacity>
         </View>
       )}
@@ -453,9 +456,23 @@ export default function HelpBoardScreen({ isEmbedded }: { isEmbedded?: boolean }
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: BG },
+const getStyles = (colors: any, isDark: boolean) => {
+  const BG          = isDark ? '#0A0A0C' : colors.background;
+  const CARD        = isDark ? '#141416' : colors.card;
+  const SHEET       = isDark ? '#111114' : colors.card;
+  const BORDER      = isDark ? '#222226' : colors.border;
+  const MUTED       = isDark ? '#A1A1AA' : colors.textSecondary;
+  const TEXT        = isDark ? '#FFFFFF' : colors.textPrimary;
+  const PRIMARY     = '#6338FA';
+  const PRIMARY_DIM = isDark ? 'rgba(99,56,250,0.15)' : 'rgba(99,56,250,0.08)';
+  const PRIMARY_BDR = isDark ? 'rgba(99,56,250,0.3)' : 'rgba(99,56,250,0.2)';
+  const GREEN       = '#22C55E';
+  const GREEN_DIM   = 'rgba(34,197,94,0.12)';
+  const RED         = '#EF4444';
+  const RED_DIM     = 'rgba(239,68,68,0.1)';
+
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: BG },
 
   standaloneHeader: {
     paddingTop: Platform.OS === 'ios' ? 56 : 40,
@@ -483,7 +500,7 @@ const s = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: '800',
-    color: '#FFF',
+    color: TEXT,
     letterSpacing: -0.4,
   },
   headerSub: {
@@ -633,7 +650,7 @@ const s = StyleSheet.create({
   cardContent: {
     fontSize: 14.5,
     fontWeight: '600',
-    color: '#FFF',
+    color: isDark ? '#E4E4E7' : colors.textPrimary,
     lineHeight: 21,
   },
   cardFooter: {
@@ -652,7 +669,7 @@ const s = StyleSheet.create({
   },
   authorName: {
     fontSize: 12,
-    color: '#FFF',
+    color: TEXT,
     fontWeight: '600',
     flexShrink: 1,
   },
@@ -706,7 +723,7 @@ const s = StyleSheet.create({
   emptyTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#FFF',
+    color: TEXT,
     marginBottom: 6,
   },
   emptySub: {
@@ -740,7 +757,7 @@ const s = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalSheet: {
-    backgroundColor: '#111114',
+    backgroundColor: SHEET,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderWidth: 1,
@@ -766,13 +783,13 @@ const s = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#FFF',
+    color: TEXT,
     letterSpacing: -0.3,
   },
   inputLabel: {
     fontSize: 13.5,
     fontWeight: '700',
-    color: '#FFF',
+    color: TEXT,
     marginBottom: 10,
   },
 
@@ -790,7 +807,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
-    backgroundColor: CARD,
+    backgroundColor: isDark ? CARD : colors.surface,
     borderWidth: 1,
     borderColor: BORDER,
   },
@@ -801,13 +818,13 @@ const s = StyleSheet.create({
   },
 
   textInput: {
-    backgroundColor: CARD,
+    backgroundColor: isDark ? CARD : colors.surface,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: BORDER,
     padding: 14,
     fontSize: 14,
-    color: '#FFF',
+    color: TEXT,
     textAlignVertical: 'top',
     height: 110,
     marginBottom: 20,
@@ -849,7 +866,7 @@ const s = StyleSheet.create({
   detailAuthorName: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFF',
+    color: TEXT,
   },
   detailAuthorCity: {
     fontSize: 12,
@@ -859,7 +876,7 @@ const s = StyleSheet.create({
   detailContent: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFF',
+    color: TEXT,
     lineHeight: 24,
     marginBottom: 16,
   },
@@ -910,11 +927,11 @@ const s = StyleSheet.create({
   repliesTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#FFF',
+    color: TEXT,
     marginBottom: 12,
   },
   replyCard: {
-    backgroundColor: CARD,
+    backgroundColor: isDark ? CARD : colors.surface,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: BORDER,
@@ -936,11 +953,11 @@ const s = StyleSheet.create({
   replyAuthorName: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#FFF',
+    color: TEXT,
   },
   replyContent: {
     fontSize: 13.5,
-    color: MUTED,
+    color: isDark ? '#E4E4E7' : colors.textPrimary,
     lineHeight: 19,
   },
   noRepliesText: {
@@ -968,7 +985,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
     height: 42,
     fontSize: 14,
-    color: '#FFF',
+    color: TEXT,
   },
   replySendBtn: {
     width: 42,
@@ -983,4 +1000,5 @@ const s = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-});
+  });
+};

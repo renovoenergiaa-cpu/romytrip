@@ -29,7 +29,7 @@ export default function TabLayout() {
   // iOS with home indicator needs bottom inset; works on both native and mobile Safari
   const isIos = Platform.OS === 'ios' || (Platform.OS === 'web' && typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent));
   const bottomPadding = insets.bottom > 0 ? insets.bottom : (isIos ? 20 : 8);
-  const tabBarHeight = 56 + bottomPadding;
+  const tabBarHeight = 62 + bottomPadding;
 
   return (
     <Tabs
@@ -43,8 +43,8 @@ export default function TabLayout() {
           borderTopWidth: StyleSheet.hairlineWidth,
           elevation: 0,
           height: tabBarHeight,
-          paddingBottom: bottomPadding,
-          paddingTop: 8,
+          paddingBottom: bottomPadding + 4,
+          paddingTop: 6,
         },
         tabBarBadgeStyle: {
           backgroundColor: colors.primary,
@@ -118,12 +118,12 @@ const styles = StyleSheet.create({
   createButtonContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 6,
+    marginTop: 4,
   },
   createGradient: {
     width: 44,
     height: 32,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F3F4F6',
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -131,8 +131,14 @@ const styles = StyleSheet.create({
     borderLeftColor: '#6338FA',
     borderRightWidth: 3,
     borderRightColor: '#D936B4',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderTopColor: '#E5E7EB',
+    borderBottomColor: '#E5E7EB',
   },
   createGradientDark: {
     backgroundColor: '#2A2A2A',
+    borderTopColor: '#3A3A3C',
+    borderBottomColor: '#3A3A3C',
   },
 });
