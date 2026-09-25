@@ -323,51 +323,92 @@ export default function RomyFeedScreen() {
     setCreateModalVisible(true);
 
     try {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permissão Negada', 'Precisamos do GPS para publicar de um local real.');
-        setCreateModalVisible(false);
-        return;
+      if (currentGpsCity) {
+        setNewPostDestination(currentGpsCity);
       }
 
-      let location = await Location.getCurrentPositionAsync({});
-      const res = await fetch(`https://photon.komoot.io/reverse?lon=${location.coords.longitude}&lat=${location.coords.latitude}`);
-      const data = await res.json();
+      let { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        const req = await Location.requestForegroundPermissionsAsync();
+        status = req.status;
+      }
 
-      if (data.features && data.features.length > 0) {
-        const locStr = formatSummarizedLocation(data.features[0].properties);
-        setNewPostDestination(locStr);
+      if (status === 'granted') {
+        let location = await Location.getLastKnownPositionAsync();
+        if (!location) {
+          location = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+        }
+
+        if (location) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
+            const res = await fetch(
+              `https://photon.komoot.io/reverse?lon=${location.coords.longitude}&lat=${location.coords.latitude}`,
+              { signal: controller.signal }
+            );
+            clearTimeout(timeoutId);
+            const data = await res.json();
+            if (data.features && data.features.length > 0) {
+              const locStr = formatSummarizedLocation(data.features[0].properties);
+              setNewPostDestination(locStr);
+            } else if (!currentGpsCity) {
+              setNewPostDestination('Local Atual');
+            }
+          } catch (_) {
+            if (!currentGpsCity) setNewPostDestination('Local Atual');
+          }
+        }
       } else {
-        setNewPostDestination('Região Próxima');
+        if (!currentGpsCity) setNewPostDestination('Local Atual');
       }
     } catch (error) {
-      setNewPostDestination('Região Próxima');
+      console.warn('Location retrieval warning:', error);
+      if (!currentGpsCity) setNewPostDestination('Local Atual');
     } finally {
       setIsLocating(false);
     }
   };
+
+  // Recupera foto caso o Android tenha reiniciado a Activity da câmera por pressão de memória
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      ImagePicker.getPendingResultAsync().then((res: any) => {
+        if (res && !res.canceled && Array.isArray(res.assets) && res.assets.length > 0) {
+          processSelectedMedia(res.assets[0].uri);
+        }
+      }).catch((e) => {
+        console.warn('getPendingResultAsync notice:', e);
+      });
+    }
+  }, []);
 
   const handleTakeCameraPhoto = async () => {
     try {
       const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
       if (!permissionResult.granted) {
         Alert.alert('Permissão Negada', 'Precisamos da sua permissão para acessar a câmera.');
-        setMediaOptionModalVisible(false);
         return;
       }
+
+      // Fecha o modal de opções antes de invocar a câmera nativa para liberar a janela
+      setMediaOptionModalVisible(false);
+      await new Promise(r => setTimeout(r, 200));
+
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        quality: 0.8,
+        allowsEditing: Platform.OS === 'ios', // Evita atividade secundária de crop no Android (causa recarregamento)
+        quality: 0.7,
       });
-      setMediaOptionModalVisible(false);
+
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setTimeout(() => {
-          processSelectedMedia(result.assets[0].uri);
-        }, 800);
+        processSelectedMedia(result.assets[0].uri);
       }
     } catch (err: any) {
       setMediaOptionModalVisible(false);
+      console.warn('Camera error:', err);
       Alert.alert('Erro', 'Não foi possível abrir a câmera: ' + (err?.message || err));
     }
   };
@@ -377,22 +418,24 @@ export default function RomyFeedScreen() {
       const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
       if (!permissionResult.granted) {
         Alert.alert('Permissão Negada', 'Precisamos da sua permissão para gravar vídeos.');
-        setMediaOptionModalVisible(false);
         return;
       }
+
+      setMediaOptionModalVisible(false);
+      await new Promise(r => setTimeout(r, 200));
+
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-        allowsEditing: true,
-        quality: 0.8,
+        allowsEditing: false,
+        quality: 0.7,
       });
-      setMediaOptionModalVisible(false);
+
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setTimeout(() => {
-          processSelectedMedia(result.assets[0].uri);
-        }, 800);
+        processSelectedMedia(result.assets[0].uri);
       }
     } catch (err: any) {
       setMediaOptionModalVisible(false);
+      console.warn('Video error:', err);
       Alert.alert('Erro', 'Não foi possível gravar o vídeo: ' + (err?.message || err));
     }
   };
@@ -402,22 +445,24 @@ export default function RomyFeedScreen() {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissionResult.granted) {
         Alert.alert('Permissão Negada', 'Precisamos de permissão para acessar a galeria de fotos.');
-        setMediaOptionModalVisible(false);
         return;
       }
+
+      setMediaOptionModalVisible(false);
+      await new Promise(r => setTimeout(r, 200));
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
-        allowsEditing: true,
-        quality: 0.8,
+        allowsEditing: Platform.OS === 'ios',
+        quality: 0.7,
       });
-      setMediaOptionModalVisible(false);
+
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setTimeout(() => {
-          processSelectedMedia(result.assets[0].uri);
-        }, 800);
+        processSelectedMedia(result.assets[0].uri);
       }
     } catch (err: any) {
       setMediaOptionModalVisible(false);
+      console.warn('Gallery error:', err);
       Alert.alert('Erro', 'Não foi possível selecionar a mídia: ' + (err?.message || err));
     }
   };

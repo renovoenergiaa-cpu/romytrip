@@ -108,9 +108,9 @@
     "semantic_hash": ""
   },
   "app/(tabs)/index.tsx": {
-    "mtime": 1790347512.7781427,
-    "seen": 1790347693.2728515,
-    "ast_hash": "835fe23ca170e5014a7cda956c26c822",
+    "mtime": 1790348310.4836283,
+    "seen": 1790348417.8608449,
+    "ast_hash": "01f5ec91232016ac2e17491ab9c17c91",
     "semantic_hash": ""
   },
   "app/(tabs)/profile.tsx": {

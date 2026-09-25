@@ -108,9 +108,9 @@
     "semantic_hash": ""
   },
   "app/(tabs)/index.tsx": {
-    "mtime": 1790345608.142792,
-    "seen": 1790345781.227435,
-    "ast_hash": "36c8632b48c36899ab8f78995413fa8d",
+    "mtime": 1790347512.7781427,
+    "seen": 1790347693.2728515,
+    "ast_hash": "835fe23ca170e5014a7cda956c26c822",
     "semantic_hash": ""
   },
   "app/(tabs)/profile.tsx": {
@@ -1317,6 +1317,12 @@
     "mtime": 1790341429.816571,
     "seen": 1790342196.3517556,
     "ast_hash": "05fe5402ed96bf608ae4ab746772e926",
+    "semantic_hash": ""
+  },
+  "src/components/UploadProgressBanner.tsx": {
+    "mtime": 1790347135.8044686,
+    "seen": 1790347693.2729893,
+    "ast_hash": "3ab7e3d9695ba72e7f707bd0175b6840",
     "semantic_hash": ""
   }
 }

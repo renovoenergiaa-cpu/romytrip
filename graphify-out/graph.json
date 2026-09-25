@@ -3474,7 +3474,7 @@
       "file_type": "code",
       "norm_label": "styles",
       "source_file": "app/(tabs)/index.tsx",
-      "source_location": "L1253"
+      "source_location": "L1298"
     },
     {
       "id": "app_tabs_index_width_height",
@@ -39925,7 +39925,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "app/(tabs)/index.tsx",
-      "source_location": "L1253",
+      "source_location": "L1298",
       "weight": 1.0
     },
     {
@@ -45226,5 +45226,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "ea4b8f33a190b0a3bb67b2712efb3a1f659cf630"
+  "built_at_commit": "33af59df5e53b7b6afcd534707e0d665a2ec2d6f"
 }
