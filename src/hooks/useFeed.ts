@@ -270,6 +270,7 @@ export function useDeleteFeedPost() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feed'] });
+      queryClient.invalidateQueries({ queryKey: ['myPosts'] });
     },
   });
 }
@@ -296,6 +297,7 @@ export function useUpdatePostCaption() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feed'] });
+      queryClient.invalidateQueries({ queryKey: ['myPosts'] });
     },
   });
 }

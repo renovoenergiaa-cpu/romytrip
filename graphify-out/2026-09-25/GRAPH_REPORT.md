@@ -1,22 +1,22 @@
 # Graph Report - Romy 0.1  (2026-09-25)
 
 ## Corpus Check
-- 209 files · ~228,210 words
+- 209 files · ~228,366 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 16 file(s) not represented in the graph (top: (none) 12, .toml 3, .example 1)
 
 ## Summary
-- 1538 nodes · 2362 edges · 152 communities (82 shown, 70 thin omitted)
+- 1538 nodes · 2355 edges · 152 communities (82 shown, 70 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 16 edges (avg confidence: 0.88)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `ea4b8f33`
+- Built from commit: `54da94fe`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- step2-trip.tsx
+- step6-connections.tsx
 - (tabs)/index.tsx
 - dependencies
 - collapsible.tsx
@@ -25,11 +25,11 @@
 - expo-router
 - ref_fs
 - chat/[id].tsx
+- communities.tsx
 - package.json
 - help-board.tsx
 - app/_layout.tsx
 - test_flight_verification.js
-- useTheme
 - theme/index.ts
 - What You Must Do When Invoked
 - spacing
@@ -44,7 +44,7 @@
 - help-support.tsx
 - eslint.config.js
 - devDependencies
-- react
+- react-native
 - public.comments
 - supabase_messenger.sql
 - vercel.json
@@ -99,7 +99,7 @@
 - Frontend UI Engineering
 - Performance Optimization
 - CI/CD and Automation
-- CustomDatePicker.tsx
+- lucide-react-native
 - Deprecation and Migration
 - Incremental Implementation
 - Code Simplification
@@ -126,7 +126,7 @@
 - ponytail-audit/SKILL.md
 - Ponytail Gain
 - Spec-Driven Development
-- react-native
+- supabase.ts
 - Source-Driven Development
 - graphify reference: add a URL and watch a folder
 - graphify reference: commit hook and native CLAUDE.md integration
@@ -166,21 +166,21 @@
   .agents/skills/ponytail-review/SKILL.md → scratch/test_flight_verification.js
 - `When NOT to be lazy` --references--> `assert()`  [INFERRED]
   .agents/skills/ponytail/SKILL.md → scratch/test_flight_verification.js
-- `RootLayout()` --calls--> `useTheme()`  [EXTRACTED]
-  app/_layout.tsx → src/theme/index.ts
+- `Step1PersonalScreen()` --calls--> `useOnboardingStore`  [EXTRACTED]
+  app/(auth)/onboarding/step1-personal.tsx → src/store/onboardingStore.ts
 
 ## Import Cycles
 - None detected.
 
 ## Communities (152 total, 70 thin omitted)
 
-### Community 0 - "step2-trip.tsx"
-Cohesion: 0.15
-Nodes (17): Step1PersonalScreen(), Step2TripScreen(), styles, Step3TravelStyleScreen(), styles, stylesList, interestsList, Step4InterestsScreen() (+9 more)
+### Community 0 - "step6-connections.tsx"
+Cohesion: 0.14
+Nodes (17): Step2TripScreen(), Step3TravelStyleScreen(), styles, stylesList, Step4InterestsScreen(), budgetOptions, Step5SocialScreen(), styles (+9 more)
 
 ### Community 1 - "(tabs)/index.tsx"
-Cohesion: 0.05
-Nodes (54): getStyles(), NotificationsScreen(), CommunitiesScreen(), ITunesSong, RomyFeedScreen(), styles, { width, height }, expo-audio (+46 more)
+Cohesion: 0.06
+Nodes (45): getStyles(), NotificationsScreen(), ITunesSong, RomyFeedScreen(), styles, { width, height }, expo-audio, expo-blur (+37 more)
 
 ### Community 2 - "dependencies"
 Cohesion: 0.04
@@ -199,8 +199,8 @@ Cohesion: 0.06
 Nodes (31): backgroundColor, backgroundImage, foregroundImage, monochromeImage, adaptiveIcon, edgeToEdgeEnabled, package, predictiveBackGestureEnabled (+23 more)
 
 ### Community 6 - "expo-router"
-Cohesion: 0.09
-Nodes (16): LoginScreen(), GENDER_PREFS, INTENTIONS, Step6ConnectionsScreen(), styles, Index(), PaywallScreen(), styles (+8 more)
+Cohesion: 0.12
+Nodes (13): LoginScreen(), styles, Index(), PaywallScreen(), styles, styles, TabLayout(), expo-router (+5 more)
 
 ### Community 7 - "ref_fs"
 Cohesion: 0.18
@@ -209,6 +209,10 @@ Nodes (6): ref_fs, fs, fs, data, fs, raw
 ### Community 8 - "chat/[id].tsx"
 Cohesion: 0.09
 Nodes (47): AudioPlayer(), ChatDetailScreen(), getStyles(), { width: SCREEN_WIDTH, height: SCREEN_HEIGHT }, CommunityScreen(), getStyles(), ChatScreen(), getStyles() (+39 more)
+
+### Community 9 - "communities.tsx"
+Cohesion: 0.19
+Nodes (15): CommunitiesScreen(), CommunityCard(), getStyles(), TYPE_COLORS, typeColors(), typeIcon(), AVAILABLE_ICONS, EditEventModal() (+7 more)
 
 ### Community 10 - "package.json"
 Cohesion: 0.07
@@ -226,21 +230,17 @@ Nodes (13): ErrorBoundary, RootLayout(), expo-status-bar, react-native-safe-area
 Cohesion: 0.07
 Nodes (24): Boundaries, Examples, Format, Scoring, Boundaries, Intensity, Output, Persistence (+16 more)
 
-### Community 14 - "useTheme"
-Cohesion: 0.10
-Nodes (29): getStyles(), NotificationSettingsScreen(), getStyles(), SettingsScreen(), CreateScreen(), styles, getStyles(), ProfileScreen() (+21 more)
-
-### Community 15 - "theme/index.ts"
-Cohesion: 0.13
-Nodes (15): { width: SCREEN_WIDTH }, Chip(), ChipProps, styles, AnimatedPressable, MatchingActionButton(), MatchingActionButtonProps, MatchingActionType (+7 more)
+### Community 14 - "theme/index.ts"
+Cohesion: 0.09
+Nodes (31): getStyles(), NotificationSettingsScreen(), getStyles(), SettingsScreen(), CreateScreen(), styles, getStyles(), ProfileScreen() (+23 more)
 
 ### Community 17 - "What You Must Do When Invoked"
 Cohesion: 0.07
 Nodes (26): For /graphify add and --watch, For /graphify query, For the commit hook and native CLAUDE.md integration, For --update and --cluster-only, /graphify, Honesty Rules, Interpreter guard for subcommands, Part A - Structural extraction for code files (+18 more)
 
 ### Community 18 - "spacing"
-Cohesion: 0.21
-Nodes (10): styles, styles, BirthDatePicker(), BirthDatePickerProps, MONTHS, styles, CustomInput(), CustomInputProps (+2 more)
+Cohesion: 0.15
+Nodes (17): Step1PersonalScreen(), styles, interestsList, styles, { width: SCREEN_WIDTH }, BirthDatePicker(), BirthDatePickerProps, MONTHS (+9 more)
 
 ### Community 19 - "Hardening Controls"
 Cohesion: 0.05
@@ -286,9 +286,9 @@ Nodes (4): { defineConfig }, expoConfig, eslint, eslint-config-expo
 Cohesion: 0.22
 Nodes (9): devDependencies, dotenv, eslint, eslint-config-expo, @expo/ngrok, playwright, qrcode, @types/react (+1 more)
 
-### Community 30 - "react"
-Cohesion: 0.12
-Nodes (21): CommunityCard(), getStyles(), TYPE_COLORS, typeColors(), typeIcon(), react, react-native-maps, AVAILABLE_EVENT_ICONS (+13 more)
+### Community 30 - "react-native"
+Cohesion: 0.15
+Nodes (13): react-native, react-native-maps, AVAILABLE_EVENT_ICONS, CreateEventModal(), CreateEventModalProps, styles, RomyMap, RomyMapProps (+5 more)
 
 ### Community 31 - "public.comments"
 Cohesion: 0.60
@@ -354,9 +354,9 @@ Nodes (24): Common Rationalizations, Connection Pool Exhaustion, Core Web Vitals
 Cohesion: 0.08
 Nodes (23): Automation Beyond CI, Basic CI Pipeline, Build Cop Role, CI/CD and Automation, CI Optimization, Common Rationalizations, Dependabot / Renovate, Deployment Strategies (+15 more)
 
-### Community 108 - "CustomDatePicker.tsx"
-Cohesion: 0.16
-Nodes (13): CityAutocomplete(), CityAutocompleteProps, PhotonFeature, styles, CreateCommunityModal(), styles, CustomDatePicker(), CustomDatePickerProps (+5 more)
+### Community 108 - "lucide-react-native"
+Cohesion: 0.15
+Nodes (17): styles, styles, lucide-react-native, CityAutocomplete(), CityAutocompleteProps, PhotonFeature, styles, CreateCommunityModal() (+9 more)
 
 ### Community 109 - "Deprecation and Migration"
 Cohesion: 0.08
@@ -462,9 +462,9 @@ Nodes (4): Boundaries, Honesty boundary, Ponytail Gain, Scoreboard
 Cohesion: 0.14
 Nodes (13): Common Rationalizations, Keeping the Spec Alive, Overview, Phase 0: Scope Check, Phase 1: Specify, Phase 2: Plan, Phase 3: Tasks, Phase 4: Implement (+5 more)
 
-### Community 135 - "react-native"
-Cohesion: 0.18
-Nodes (10): MOCK_PROFILES, styles, styles, DEFAULT_PRIVACY, getStyles(), PrivacySecurityScreen(), react-native, authStorage (+2 more)
+### Community 135 - "supabase.ts"
+Cohesion: 0.15
+Nodes (17): MOCK_PROFILES, styles, DEFAULT_PRIVACY, getStyles(), PrivacySecurityScreen(), EventDetailsModal(), EventDetailsModalProps, styles (+9 more)
 
 ### Community 136 - "Source-Driven Development"
 Cohesion: 0.15
@@ -503,24 +503,24 @@ Cohesion: 0.50
 Nodes (3): cjs, fs, tsSource
 
 ## Knowledge Gaps
-- **852 isolated node(s):** `idea-refine.sh script`, `name`, `slug`, `version`, `orientation` (+847 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1019 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **853 isolated node(s):** `{ width, height }`, `ITunesSong`, `styles`, `ProgressBarProps`, `OnboardingState` (+848 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1020 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **70 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `react-native` connect `react-native` to `step2-trip.tsx`, `(tabs)/index.tsx`, `collapsible.tsx`, `ProximaViagemScreen.tsx`, `expo-router`, `chat/[id].tsx`, `package.json`, `help-board.tsx`, `app/_layout.tsx`, `CustomDatePicker.tsx`, `useTheme`, `edit-profile.tsx`, `theme/index.ts`, `spacing`, `help-support.tsx`, `react`?**
-  _High betweenness centrality (0.037) - this node is a cross-community bridge._
-- **Why does `@supabase/supabase-js` connect `@supabase/supabase-js` to `test_onboarding_e2e.js`, `expo-router`, `react-native`, `package.json`, `test_all_screens_authenticated.js`?**
-  _High betweenness centrality (0.027) - this node is a cross-community bridge._
+- **Why does `react-native` connect `react-native` to `step6-connections.tsx`, `(tabs)/index.tsx`, `collapsible.tsx`, `ProximaViagemScreen.tsx`, `expo-router`, `supabase.ts`, `chat/[id].tsx`, `communities.tsx`, `package.json`, `help-board.tsx`, `lucide-react-native`, `app/_layout.tsx`, `theme/index.ts`, `edit-profile.tsx`, `spacing`, `help-support.tsx`?**
+  _High betweenness centrality (0.032) - this node is a cross-community bridge._
 - **Why does `dependencies` connect `dependencies` to `package.json`?**
-  _High betweenness centrality (0.024) - this node is a cross-community bridge._
-- **What connects `idea-refine.sh script`, `name`, `slug` to the rest of the system?**
-  _852 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `step2-trip.tsx` be split into smaller, more focused modules?**
-  _Cohesion score 0.14624505928853754 - nodes in this community are weakly interconnected._
+  _High betweenness centrality (0.028) - this node is a cross-community bridge._
+- **Why does `catch()` connect `Constraint-Driven Development` to `ProximaViagemScreen.tsx`?**
+  _High betweenness centrality (0.026) - this node is a cross-community bridge._
+- **What connects `{ width, height }`, `ITunesSong`, `styles` to the rest of the system?**
+  _853 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `step6-connections.tsx` be split into smaller, more focused modules?**
+  _Cohesion score 0.13852813852813853 - nodes in this community are weakly interconnected._
 - **Should `(tabs)/index.tsx` be split into smaller, more focused modules?**
-  _Cohesion score 0.052917232021709636 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05565638233514821 - nodes in this community are weakly interconnected._
 - **Should `dependencies` be split into smaller, more focused modules?**
   _Cohesion score 0.044444444444444446 - nodes in this community are weakly interconnected._

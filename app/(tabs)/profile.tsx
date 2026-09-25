@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,11 @@ import {
   Image,
   Platform,
   StatusBar,
-  Alert,
   DeviceEventEmitter,
+  Modal,
+  TextInput,
+  ActivityIndicator,
+  KeyboardAvoidingView,
 } from 'react-native';
 import {
   Settings,
@@ -30,6 +33,7 @@ import {
   MoreHorizontal,
   Plus,
   Image as ImageIcon,
+  X,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -38,6 +42,9 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../src/lib/supabase';
 import { spacing, useTheme } from '../../src/theme';
 import { SkeletonProfileHeader, SkeletonLine } from '../../src/components/SkeletonLoader';
+import { useDeleteFeedPost, useUpdatePostCaption } from '../../src/hooks/useFeed';
+import PostOptionsSheet from '../../src/components/PostOptionsSheet';
+import MomentoDetailModal from '../../src/components/MomentoDetailModal';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -85,6 +92,66 @@ export default function ProfileScreen() {
       return data || [];
     },
   });
+
+  // Momento Detail & Options States
+  const [selectedMomento, setSelectedMomento] = useState<any>(null);
+  const [optionsPost, setOptionsPost] = useState<any>(null);
+  const [isEditCaptionModalVisible, setIsEditCaptionModalVisible] = useState(false);
+  const [editingPost, setEditingPost] = useState<any>(null);
+  const [editedCaptionText, setEditedCaptionText] = useState('');
+
+  const { mutateAsync: deleteFeedPost } = useDeleteFeedPost();
+  const { mutateAsync: updatePostCaption, isPending: isUpdatingCaption } = useUpdatePostCaption();
+
+  const handleViewInFeed = (postId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSelectedMomento(null);
+    setOptionsPost(null);
+    router.navigate('/(tabs)');
+    setTimeout(() => {
+      DeviceEventEmitter.emit('scrollToPost', { postId });
+    }, 150);
+    setTimeout(() => {
+      DeviceEventEmitter.emit('scrollToPost', { postId });
+    }, 450);
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    try {
+      await deleteFeedPost({ postId });
+      if (selectedMomento?.id === postId) {
+        setSelectedMomento(null);
+      }
+      setOptionsPost(null);
+    } catch (e) {
+      console.warn('Erro ao deletar post:', e);
+    }
+  };
+
+  const handleStartEditCaption = (post: any) => {
+    setEditingPost(post);
+    setEditedCaptionText(post.description || post.caption || '');
+    setIsEditCaptionModalVisible(true);
+  };
+
+  const handleSaveCaption = async () => {
+    if (!editingPost) return;
+    try {
+      await updatePostCaption({
+        postId: editingPost.id,
+        description: editedCaptionText,
+      });
+      if (selectedMomento?.id === editingPost.id) {
+        setSelectedMomento((prev: any) =>
+          prev ? { ...prev, description: editedCaptionText, caption: editedCaptionText } : null
+        );
+      }
+      setIsEditCaptionModalVisible(false);
+      setEditingPost(null);
+    } catch (e) {
+      console.warn('Erro ao atualizar legenda:', e);
+    }
+  };
 
   const defaultAvatar =
     'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80';
@@ -448,10 +515,10 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 4. Momentos de viagem Section */}
+        {/* 4. Momentos Section */}
         <View style={styles.momentosSection}>
           <View style={styles.momentosHeaderRow}>
-            <Text style={styles.momentosSectionTitle}>Momentos de viagem</Text>
+            <Text style={styles.momentosSectionTitle}>Momentos</Text>
             <TouchableOpacity
               activeOpacity={0.8}
               style={styles.novoMomentoBtn}
@@ -472,50 +539,48 @@ export default function ProfileScreen() {
           {userPosts && userPosts.length > 0 ? (
             userPosts.map((post: any) => (
               <View key={post.id} style={styles.momentoCard}>
-                <Image
-                  source={{
-                    uri: post.image_url || 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
+                <TouchableOpacity
+                  activeOpacity={0.82}
+                  style={styles.momentoCardBody}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setSelectedMomento(post);
                   }}
-                  style={styles.momentoThumbnail}
-                />
-                <View style={styles.momentoMetaCol}>
-                  <Text style={styles.momentoTitle} numberOfLines={1}>
-                    {post.caption || 'Momento de viagem'}
-                  </Text>
-                  <View style={styles.momentoLocationRow}>
-                    <MapPin size={12} color={isDark ? '#A1A1AA' : '#6B7280'} strokeWidth={2} />
-                    <Text style={styles.momentoLocationText} numberOfLines={1}>
-                      {post.destination || 'Local registrado'}
+                >
+                  <Image
+                    source={{
+                      uri: post.media_url || post.image_url || 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
+                    }}
+                    style={styles.momentoThumbnail}
+                  />
+                  <View style={styles.momentoMetaCol}>
+                    <Text style={styles.momentoTitle} numberOfLines={1}>
+                      {post.description || post.caption || 'Momento'}
                     </Text>
+                    <View style={styles.momentoLocationRow}>
+                      <MapPin size={12} color={isDark ? '#A1A1AA' : '#6B7280'} strokeWidth={2} />
+                      <Text style={styles.momentoLocationText} numberOfLines={1}>
+                        {post.destination || 'Local registrado'}
+                      </Text>
+                    </View>
+                    <View style={styles.momentoPhotoCountRow}>
+                      <ImageIcon size={12} color={isDark ? '#A1A1AA' : '#6B7280'} strokeWidth={2} />
+                      <Text style={styles.momentoPhotoCountText}>
+                        {new Date(post.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.momentoPhotoCountRow}>
-                    <ImageIcon size={12} color={isDark ? '#A1A1AA' : '#6B7280'} strokeWidth={2} />
-                    <Text style={styles.momentoPhotoCountText}>
-                      {new Date(post.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
-                    </Text>
-                  </View>
-                </View>
+                </TouchableOpacity>
+
                 <TouchableOpacity
                   activeOpacity={0.7}
                   style={styles.momentoMoreBtn}
                   onPress={() => {
                     Haptics.selectionAsync();
-                    Alert.alert(
-                      'Momento de Viagem',
-                      post.caption || post.destination || 'Publicação',
-                      [
-                        {
-                          text: 'Ver no Feed',
-                          onPress: () => router.navigate('/(tabs)'),
-                        },
-                        {
-                          text: 'Editar Perfil',
-                          onPress: () => router.push('/edit-profile'),
-                        },
-                        { text: 'Fechar', style: 'cancel' },
-                      ]
-                    );
+                    setOptionsPost(post);
                   }}
+                  accessibilityLabel="Opções do momento"
+                  accessibilityRole="button"
                 >
                   <MoreHorizontal size={18} color={isDark ? '#A1A1AA' : '#6B7280'} />
                 </TouchableOpacity>
@@ -546,6 +611,95 @@ export default function ProfileScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Momento Detail Modal (Tapping card or thumbnail) */}
+      <MomentoDetailModal
+        visible={!!selectedMomento}
+        onClose={() => setSelectedMomento(null)}
+        post={selectedMomento}
+        onViewInFeed={handleViewInFeed}
+        onOptionsPress={(post) => setOptionsPost(post)}
+      />
+
+      {/* Modern App-Styled Options Bottom Sheet */}
+      <PostOptionsSheet
+        visible={!!optionsPost}
+        onClose={() => setOptionsPost(null)}
+        post={optionsPost}
+        title="Opções do Momento"
+        onViewInFeed={handleViewInFeed}
+        onEditCaption={handleStartEditCaption}
+        onDelete={handleDeletePost}
+        isOwner={true}
+      />
+
+      {/* Edit Caption Modal */}
+      <Modal visible={isEditCaptionModalVisible} animationType="fade" transparent>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.editCaptionModalOverlay}
+        >
+          <View
+            style={[
+              styles.editCaptionCard,
+              {
+                backgroundColor: isDark ? '#18181B' : '#FFFFFF',
+                borderColor: isDark ? '#27272A' : '#E4E4E7',
+              },
+            ]}
+          >
+            <View style={styles.editCaptionHeader}>
+              <Text
+                style={[
+                  styles.editCaptionTitle,
+                  { color: isDark ? '#FFFFFF' : '#18181B' },
+                ]}
+              >
+                Editar legenda
+              </Text>
+              <TouchableOpacity
+                onPress={() => setIsEditCaptionModalVisible(false)}
+                style={{ padding: 4 }}
+              >
+                <X size={20} color={isDark ? '#A1A1AA' : '#6B7280'} />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={[
+                styles.editCaptionInput,
+                {
+                  backgroundColor: isDark ? '#27272A' : '#F4F4F5',
+                  color: isDark ? '#FFFFFF' : '#18181B',
+                  borderColor: isDark ? '#3F3F46' : '#E4E4E7',
+                },
+              ]}
+              multiline
+              numberOfLines={4}
+              value={editedCaptionText}
+              onChangeText={setEditedCaptionText}
+              placeholder="Escreva a legenda..."
+              placeholderTextColor={isDark ? '#71717A' : '#9CA3AF'}
+            />
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={[
+                styles.saveCaptionBtn,
+                isUpdatingCaption && { opacity: 0.6 },
+              ]}
+              onPress={handleSaveCaption}
+              disabled={isUpdatingCaption}
+            >
+              {isUpdatingCaption ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.saveCaptionBtnText}>Salvar Alterações</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1013,6 +1167,59 @@ const getStyles = (colors: any, isDark: boolean) =>
     emptyMomentsCtaText: {
       color: '#FFFFFF',
       fontSize: 13,
+      fontWeight: '600',
+    },
+    momentoCardBody: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    editCaptionModalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.65)',
+      justifyContent: 'center',
+      paddingHorizontal: 20,
+    },
+    editCaptionCard: {
+      borderRadius: 24,
+      padding: 20,
+      borderWidth: 1,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.2,
+      shadowRadius: 16,
+      elevation: 20,
+    },
+    editCaptionHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 14,
+    },
+    editCaptionTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+    },
+    editCaptionInput: {
+      height: 110,
+      borderRadius: 14,
+      borderWidth: 1,
+      padding: 12,
+      textAlignVertical: 'top',
+      fontSize: 14,
+      marginBottom: 16,
+    },
+    saveCaptionBtn: {
+      height: 48,
+      borderRadius: 14,
+      backgroundColor: '#6338FA',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    saveCaptionBtnText: {
+      color: '#FFFFFF',
+      fontSize: 15,
       fontWeight: '600',
     },
   });

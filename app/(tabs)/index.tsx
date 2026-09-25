@@ -28,6 +28,7 @@ import HelpBoardScreen from '../../app/help-board';
 import ProximaViagemScreen from '../../src/components/ProximaViagemScreen';
 import FeedPostItem, { FEED_SNAP_HEIGHT, PostItemData } from '../../src/components/FeedPostItem';
 import { UploadProgressBanner, UploadingPostData } from '../../src/components/UploadProgressBanner';
+import PostOptionsSheet from '../../src/components/PostOptionsSheet';
 
 const { width, height } = Dimensions.get('window');
 const SNAP_HEIGHT = FEED_SNAP_HEIGHT;
@@ -59,6 +60,32 @@ export default function RomyFeedScreen() {
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const currentUserId = useCurrentUserId();
   const insets = useSafeAreaInsets();
+
+  const [activePostIndex, setActivePostIndex] = useState(0);
+  const feedFlatListRef = useRef<FlatList<any>>(null);
+  const pendingScrollToPostId = useRef<string | null>(null);
+
+  const performScrollToTargetPost = (targetId: string, currentPosts: any[]) => {
+    if (!currentPosts || currentPosts.length === 0) return false;
+    const targetIndex = currentPosts.findIndex((p: any) => p.id === targetId);
+    if (targetIndex !== -1) {
+      pendingScrollToPostId.current = null;
+      setActivePostIndex(targetIndex);
+      setTimeout(() => {
+        try {
+          feedFlatListRef.current?.scrollToIndex({ index: targetIndex, animated: true });
+        } catch {
+          feedFlatListRef.current?.scrollToOffset({
+            offset: targetIndex * FEED_SNAP_HEIGHT,
+            animated: true,
+          });
+        }
+      }, 80);
+      return true;
+    }
+    return false;
+  };
+
   // Height of the floating top nav bar.
   // Android: paddingTop:40 already clears the status bar, so don't add insets.top again.
   // iOS: paddingTop is only 10, so we need insets.top for the notch.
@@ -121,6 +148,35 @@ export default function RomyFeedScreen() {
   }, [activeTab, currentGpsCity, userCityOnly, userNextDestination]);
 
   const { data: posts, isLoading, refetch: refetchFeed } = useFeed(destinationFilter);
+
+  useEffect(() => {
+    if (pendingScrollToPostId.current && posts && posts.length > 0) {
+      performScrollToTargetPost(pendingScrollToPostId.current, posts);
+    }
+  }, [posts]);
+
+  useEffect(() => {
+    const scrollToSub = DeviceEventEmitter.addListener('scrollToPost', ({ postId }: { postId: string }) => {
+      if (!postId) return;
+      setActiveTab('aqui');
+      setDestinationFilter('');
+      pendingScrollToPostId.current = postId;
+
+      if (posts && performScrollToTargetPost(postId, posts)) {
+        return;
+      }
+
+      refetchFeed().then((res) => {
+        const freshPosts = res.data || [];
+        performScrollToTargetPost(postId, freshPosts);
+      });
+    });
+
+    return () => {
+      scrollToSub.remove();
+    };
+  }, [posts, refetchFeed]);
+
   const { data: likedPostsMap } = usePostLikes();
   const { mutate: toggleLike } = useTogglePostLike();
   const { mutate: createPost, isPending: isCreatingPost } = useCreatePost();
@@ -147,7 +203,6 @@ export default function RomyFeedScreen() {
   const [draftEventLocation, setDraftEventLocation] = useState<{ latitude: number, longitude: number } | null>(null);
   const [draftLocationName, setDraftLocationName] = useState<string>('Buscando local...');
   const mapRef = useRef<any>(null);
-  const feedFlatListRef = useRef<FlatList<any>>(null);
 
   // Post Creation & Upload States
   const [uploadingPost, setUploadingPost] = useState<UploadingPostData | null>(null);
@@ -662,7 +717,7 @@ export default function RomyFeedScreen() {
     );
   };
 
-  const [activePostIndex, setActivePostIndex] = useState(0);
+  const [postOptionsItem, setPostOptionsItem] = useState<any>(null);
 
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
     if (viewableItems && viewableItems.length > 0) {
@@ -675,43 +730,8 @@ export default function RomyFeedScreen() {
   }).current;
 
   const handlePostOptions = (item: any) => {
-    Alert.alert(
-      'Opções da Publicação',
-      '',
-      [
-        { 
-          text: 'Editar Legenda', 
-          onPress: () => {
-            setEditingPostId(item.id);
-            setEditedCaption(item.description || '');
-            setEditCaptionModalVisible(true);
-          }
-        },
-        { 
-          text: 'Excluir', 
-          style: 'destructive', 
-          onPress: () => {
-            Alert.alert(
-              'Excluir Publicação',
-              'Tem certeza que deseja apagar esta publicação?',
-              [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                  text: 'Excluir',
-                  style: 'destructive',
-                  onPress: () => {
-                    deleteFeedPost({ postId: item.id }, {
-                      onSuccess: () => Alert.alert('Sucesso', 'Publicação excluída.')
-                    });
-                  }
-                }
-              ]
-            );
-          }
-        },
-        { text: 'Cancelar', style: 'cancel' }
-      ]
-    );
+    Haptics.selectionAsync();
+    setPostOptionsItem(item);
   };
 
   const renderPost = ({ item, index }: { item: any; index: number }) => {
@@ -842,6 +862,17 @@ export default function RomyFeedScreen() {
             snapToInterval={FEED_SNAP_HEIGHT}
             snapToAlignment="start"
             decelerationRate="fast"
+            getItemLayout={(data, index) => ({
+              length: FEED_SNAP_HEIGHT,
+              offset: FEED_SNAP_HEIGHT * index,
+              index,
+            })}
+            onScrollToIndexFailed={(info) => {
+              feedFlatListRef.current?.scrollToOffset({
+                offset: info.index * FEED_SNAP_HEIGHT,
+                animated: true,
+              });
+            }}
             onViewableItemsChanged={onViewableItemsChanged}
             viewabilityConfig={viewabilityConfig}
             refreshControl={
@@ -1291,6 +1322,23 @@ export default function RomyFeedScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Modern Post Options Sheet */}
+      <PostOptionsSheet
+        visible={!!postOptionsItem}
+        onClose={() => setPostOptionsItem(null)}
+        post={postOptionsItem}
+        title="Opções da Publicação"
+        onEditCaption={(post) => {
+          setEditingPostId(post.id);
+          setEditedCaption(post.description || post.caption || '');
+          setEditCaptionModalVisible(true);
+        }}
+        onDelete={async (postId) => {
+          deleteFeedPost({ postId });
+        }}
+        isOwner={postOptionsItem?.user_id === currentUserId}
+      />
     </View>
   );
 }
