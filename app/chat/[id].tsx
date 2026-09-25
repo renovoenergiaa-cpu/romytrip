@@ -43,7 +43,15 @@ import {
 } from 'lucide-react-native';
 import { useState, useRef, useEffect } from 'react';
 import { useGlobalNotification } from '../../src/context/GlobalNotificationContext';
-import { Audio, Video, ResizeMode } from 'expo-av';
+import { 
+  createAudioPlayer, 
+  AudioModule, 
+  AudioRecorder, 
+  RecordingPresets, 
+  requestRecordingPermissionsAsync, 
+  setAudioModeAsync 
+} from 'expo-audio';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -64,40 +72,44 @@ import {
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+const ChatVideoItem = ({ uri }: { uri: string }) => {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = false;
+  });
+  return (
+    <VideoView
+      player={player}
+      style={{ width: '100%', height: '100%' }}
+      nativeControls={true}
+      contentFit="contain"
+    />
+  );
+};
+
 const AudioPlayer = ({ url, isSender }: { url: string; isSender: boolean }) => {
   const { colors } = useTheme();
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [player, setPlayer] = useState<any>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   
   const playSound = async () => {
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        staysActiveInBackground: false,
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
       });
 
-      if (sound) {
+      if (player) {
         if (isPlaying) {
-          await sound.pauseAsync();
+          player.pause();
           setIsPlaying(false);
         } else {
-          await sound.playAsync();
+          player.play();
           setIsPlaying(true);
         }
       } else {
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: url },
-          { shouldPlay: true, isLooping: false }
-        );
-        newSound.setOnPlaybackStatusUpdate((status: any) => {
-          if (status.isLoaded && status.didJustFinish) {
-            setIsPlaying(false);
-            newSound.stopAsync();
-          }
-        });
-        setSound(newSound);
+        const newPlayer = createAudioPlayer({ uri: url });
+        newPlayer.play();
+        setPlayer(newPlayer);
         setIsPlaying(true);
       }
     } catch (err) {
@@ -106,8 +118,15 @@ const AudioPlayer = ({ url, isSender }: { url: string; isSender: boolean }) => {
   };
 
   useEffect(() => {
-    return sound ? () => { sound.unloadAsync(); } : undefined;
-  }, [sound]);
+    return () => {
+      if (player) {
+        try {
+          player.pause();
+          player.remove?.();
+        } catch (e) {}
+      }
+    };
+  }, [player]);
 
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', width: 180, paddingVertical: 4 }}>
@@ -139,7 +158,7 @@ export default function ChatDetailScreen() {
   }, [id, setActiveConversationId]);
 
   const [messageText, setMessageText] = useState('');
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recording, setRecording] = useState<AudioRecorder | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -268,15 +287,13 @@ export default function ChatDetailScreen() {
       const fileUri = `${FileSystem.cacheDirectory}live_voice_${Date.now()}_${Math.random().toString(36).slice(2)}.m4a`;
       await FileSystem.writeAsStringAsync(fileUri, chunkBase64, { encoding: 'base64' });
 
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: fileUri },
-        { shouldPlay: true, volume: 1.0 }
-      );
+      const player: any = createAudioPlayer({ uri: fileUri });
+      player.play();
 
-      sound.setOnPlaybackStatusUpdate(async (status: any) => {
-        if (status.isLoaded && status.didJustFinish) {
+      player.addListener('playbackStatusUpdate', async (status: any) => {
+        if (status.didJustFinish) {
           try {
-            await sound.unloadAsync();
+            player.remove?.();
             await FileSystem.deleteAsync(fileUri, { idempotent: true });
           } catch {}
           isPlayingVoiceRef.current = false;
@@ -298,12 +315,11 @@ export default function ChatDetailScreen() {
   // Handle dynamic audio routing when speaker is toggled
   useEffect(() => {
     if (callState === 'connected') {
-      Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        staysActiveInBackground: true,
-        playThroughEarpieceAndroid: !isSpeakerOn,
+      setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        shouldPlayInBackground: true,
+        shouldRouteThroughEarpiece: !isSpeakerOn,
       }).catch(() => {});
     }
   }, [isSpeakerOn, callState]);
@@ -422,33 +438,7 @@ export default function ChatDetailScreen() {
     };
   }, [id, currentUserId]);
 
-  // Cross-platform MPEG4 AAC Audio Recording options compatible with iOS and Android (Ensures .m4a extension)
-  const AAC_AUDIO_RECORDING_OPTIONS: Audio.RecordingOptions = {
-    isMeteringEnabled: false,
-    android: {
-      extension: '.m4a',
-      outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-      audioEncoder: Audio.AndroidAudioEncoder.AAC,
-      sampleRate: 16000,
-      numberOfChannels: 1,
-      bitRate: 32000,
-    },
-    ios: {
-      extension: '.m4a',
-      outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-      audioQuality: Audio.IOSAudioQuality.LOW,
-      sampleRate: 16000,
-      numberOfChannels: 1,
-      bitRate: 32000,
-      linearPCMBitDepth: 16,
-      linearPCMIsBigEndian: false,
-      linearPCMIsFloat: false,
-    },
-    web: {
-      mimeType: 'audio/mp4',
-      bitsPerSecond: 32000,
-    },
-  };
+  const AAC_AUDIO_RECORDING_OPTIONS = RecordingPresets.LOW_QUALITY;
 
   const getOtherUserId = async (): Promise<string | null> => {
     if (recipientIdRef.current) return recipientIdRef.current;
@@ -517,14 +507,17 @@ export default function ChatDetailScreen() {
     };
   }, [id, currentUserId]);
 
-  const keepAliveSoundRef = useRef<Audio.Sound | null>(null);
+  const keepAlivePlayerRef = useRef<any>(null);
 
-  // Keep-alive silent sound effect to pin Expo AV's native AudioSession active during calls
+  // Keep-alive silent sound effect to pin AudioSession active during calls
   useEffect(() => {
     if (callState !== 'connected') {
-      if (keepAliveSoundRef.current) {
-        keepAliveSoundRef.current.unloadAsync().catch(() => {});
-        keepAliveSoundRef.current = null;
+      if (keepAlivePlayerRef.current) {
+        try {
+          keepAlivePlayerRef.current.pause();
+          keepAlivePlayerRef.current.remove?.();
+        } catch (e) {}
+        keepAlivePlayerRef.current = null;
       }
       return;
     }
@@ -532,20 +525,23 @@ export default function ChatDetailScreen() {
     const startKeepAliveSound = async () => {
       try {
         const silentAudioUri = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
-        const { sound } = await Audio.Sound.createAsync(
-          { uri: silentAudioUri },
-          { shouldPlay: true, isLooping: true, volume: 0.01 }
-        );
-        keepAliveSoundRef.current = sound;
+        const player = createAudioPlayer({ uri: silentAudioUri });
+        player.loop = true;
+        player.volume = 0.01;
+        player.play();
+        keepAlivePlayerRef.current = player;
       } catch (e) {}
     };
 
     startKeepAliveSound();
 
     return () => {
-      if (keepAliveSoundRef.current) {
-        keepAliveSoundRef.current.unloadAsync().catch(() => {});
-        keepAliveSoundRef.current = null;
+      if (keepAlivePlayerRef.current) {
+        try {
+          keepAlivePlayerRef.current.pause();
+          keepAlivePlayerRef.current.remove?.();
+        } catch (e) {}
+        keepAlivePlayerRef.current = null;
       }
     };
   }, [callState]);
@@ -607,21 +603,21 @@ export default function ChatDetailScreen() {
   }, [autoAcceptCall, paramCallType, currentUserId, id]);
 
   const recordSingleSlice = async (): Promise<string | null> => {
-    let recording: Audio.Recording | null = null;
+    let recorder: AudioRecorder | null = null;
     try {
-      recording = new Audio.Recording();
-      await recording.prepareToRecordAsync(AAC_AUDIO_RECORDING_OPTIONS);
-      await recording.startAsync();
+      recorder = new AudioModule.AudioRecorder(RecordingPresets.LOW_QUALITY);
+      await recorder.prepareToRecordAsync();
+      recorder.record();
       await new Promise((res) => setTimeout(res, 1200)); // Reduzido de 3000ms para 1200ms para mais fluidez
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
+      await recorder.stop();
+      const uri = recorder.uri;
       if (!uri) return null;
       const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
       try { await FileSystem.deleteAsync(uri, { idempotent: true }); } catch (e) {}
       return base64;
     } catch (e) {
-      if (recording) {
-        try { await recording.stopAndUnloadAsync(); } catch (err) {}
+      if (recorder) {
+        try { await recorder.stop(); } catch (err) {}
       }
       return null;
     }
@@ -634,12 +630,11 @@ export default function ChatDetailScreen() {
 
     const setupLiveVoiceTransmission = async () => {
       try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
-          shouldDuckAndroid: true,
-          staysActiveInBackground: true,
-          playThroughEarpieceAndroid: !isSpeakerOn,
+        await setAudioModeAsync({
+          allowsRecording: true,
+          playsInSilentMode: true,
+          shouldPlayInBackground: true,
+          shouldRouteThroughEarpiece: !isSpeakerOn,
         });
 
         while (isStreamActive && callState === 'connected') {
@@ -756,7 +751,7 @@ export default function ChatDetailScreen() {
         }
       }
     }
-    const audioPerm = await Audio.requestPermissionsAsync();
+    const audioPerm = await requestRecordingPermissionsAsync();
     if (!audioPerm.granted) {
       Alert.alert('Permissão de Áudio', 'Habilite o microfone nas configurações para realizar chamadas.');
     }
@@ -795,7 +790,7 @@ export default function ChatDetailScreen() {
         }
       }
     }
-    await Audio.requestPermissionsAsync();
+    await requestRecordingPermissionsAsync();
 
     setCallState('connected');
     setCallTimer(0);
@@ -830,14 +825,12 @@ export default function ChatDetailScreen() {
     voiceQueueRef.current = [];
     isPlayingVoiceRef.current = false;
     
-    // Delay audio mode reset to allow any remaining sound buffers to flush
     setTimeout(() => {
-      Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        staysActiveInBackground: false,
-        playThroughEarpieceAndroid: false,
+      setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
+        shouldRouteThroughEarpiece: false,
       }).catch(() => {});
     }, 1500);
   };
@@ -848,14 +841,16 @@ export default function ChatDetailScreen() {
 
   const startRecording = async () => {
     try {
-      const permission = await Audio.requestPermissionsAsync();
+      const permission = await requestRecordingPermissionsAsync();
       if (permission.status === 'granted') {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
+        await setAudioModeAsync({
+          allowsRecording: true,
+          playsInSilentMode: true,
         });
-        const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-        setRecording(recording);
+        const rec = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+        await rec.prepareToRecordAsync();
+        rec.record();
+        setRecording(rec);
         setIsRecording(true);
       }
     } catch (err) {
@@ -867,14 +862,14 @@ export default function ChatDetailScreen() {
     setIsRecording(false);
     if (recording) {
       try {
-        await recording.stopAndUnloadAsync();
+        await recording.stop();
       } catch (e) {}
       setRecording(null);
     }
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
       });
     } catch (e) {}
   };
@@ -884,15 +879,15 @@ export default function ChatDetailScreen() {
     if (recording) {
       let uri: string | null = null;
       try {
-        await recording.stopAndUnloadAsync();
-        uri = recording.getURI();
+        await recording.stop();
+        uri = recording.uri;
       } catch (e) {}
       setRecording(null);
 
       try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
+        await setAudioModeAsync({
+          allowsRecording: false,
+          playsInSilentMode: true,
         });
       } catch (e) {}
       
@@ -1174,13 +1169,7 @@ export default function ChatDetailScreen() {
                     </TouchableOpacity>
                   ) : msg.video_url ? (
                     <View style={styles.chatVideoContainer}>
-                      <Video
-                        source={{ uri: msg.video_url }}
-                        style={styles.chatVideo}
-                        useNativeControls
-                        resizeMode={ResizeMode.CONTAIN}
-                        isLooping={false}
-                      />
+                      <ChatVideoItem uri={msg.video_url} />
                       {msg.text && msg.text !== '[Vídeo]' && (
                         <Text style={[isSender ? styles.messageTextSender : styles.messageTextReceiver, { marginTop: 6 }]}>
                           {msg.text}

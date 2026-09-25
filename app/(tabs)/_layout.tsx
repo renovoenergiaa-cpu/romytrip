@@ -1,4 +1,4 @@
-import { Tabs, Redirect } from 'expo-router';
+import { Tabs, Redirect, useRouter } from 'expo-router';
 import { Home, Users, MessageCircle, User, Plus } from 'lucide-react-native';
 import { StyleSheet, View, DeviceEventEmitter, Platform, ActivityIndicator } from 'react-native';
 import { useTheme } from '../../src/theme';
@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 
 export default function TabLayout() {
+  const router = useRouter();
   const { session, isLoading } = useAuth();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
@@ -81,7 +82,10 @@ export default function TabLayout() {
         listeners={() => ({
           tabPress: (e) => {
             e.preventDefault();
-            DeviceEventEmitter.emit('openCreatePost');
+            router.navigate('/(tabs)');
+            setTimeout(() => {
+              DeviceEventEmitter.emit('openCreatePost');
+            }, 120);
           },
         })}
       />

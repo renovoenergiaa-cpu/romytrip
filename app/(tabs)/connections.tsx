@@ -86,6 +86,22 @@ export default function ConnectionsScreen() {
   const saveButtonScale = useSharedValue<number>(1);
 
   useEffect(() => {
+    // Sync persisted privacy settings on mount
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data } = await supabase.from('users').select('privacy_settings').eq('id', user.id).maybeSingle();
+          if (data?.privacy_settings?.publicProfile === false) {
+            setIsInvisible(true);
+            setTempInvisible(true);
+          }
+        }
+      } catch (e) {}
+    })();
+  }, []);
+
+  useEffect(() => {
     // Reset index when fresh traveler data is received
     setCurrentIndex(0);
     isActionInProgress.current = false;
@@ -346,17 +362,17 @@ export default function ConnectionsScreen() {
 
   // Dynamic overlay elements for active card
   const foregroundOverlay = (
-    <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Animated.View
         style={[
-          StyleSheet.absoluteFillObject,
+          StyleSheet.absoluteFill,
           { backgroundColor: '#EF4444' },
           animatedRejectOverlayStyle,
         ]}
       />
       <Animated.View
         style={[
-          StyleSheet.absoluteFillObject,
+          StyleSheet.absoluteFill,
           { backgroundColor: '#00A86B' },
           animatedConnectOverlayStyle,
         ]}
@@ -378,6 +394,10 @@ export default function ConnectionsScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.headerIconBtn}
+          onPress={() => {
+            Haptics.selectionAsync();
+            router.push('/settings');
+          }}
           accessibilityLabel="Menu principal"
           accessibilityRole="button"
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -435,7 +455,7 @@ export default function ConnectionsScreen() {
               key={`bg-${nextTraveler.id}`}
               pointerEvents="none"
               style={[
-                StyleSheet.absoluteFillObject,
+                StyleSheet.absoluteFill,
                 { zIndex: 1 },
                 animatedBackgroundCardStyle,
               ]}
@@ -453,7 +473,7 @@ export default function ConnectionsScreen() {
           <Animated.View
             key={`fg-${currentTraveler.id}`}
             style={[
-              StyleSheet.absoluteFillObject,
+              StyleSheet.absoluteFill,
               { zIndex: 2 },
               animatedForegroundCardStyle,
             ]}
@@ -656,17 +676,27 @@ export default function ConnectionsScreen() {
                   setIsInvisible(tempInvisible);
                   setFiltersModalVisible(false);
 
-                  // Persist gender preference in Supabase database
+                  // Persist gender preference and ghost mode in Supabase database
                   try {
                     const { data: { user } } = await supabase.auth.getUser();
-                    if (user && tempFilters.gender) {
-                      const pref =
-                        tempFilters.gender === 'Feminino' || tempFilters.gender === 'Mulheres'
-                          ? 'female'
-                          : tempFilters.gender === 'Masculino' || tempFilters.gender === 'Homens'
-                          ? 'male'
-                          : 'all';
-                      await supabase.from('users').update({ gender_preference: pref }).eq('id', user.id);
+                    if (user) {
+                      const updates: any = {};
+                      if (tempFilters.gender) {
+                        updates.gender_preference =
+                          tempFilters.gender === 'Feminino' || tempFilters.gender === 'Mulheres'
+                            ? 'female'
+                            : tempFilters.gender === 'Masculino' || tempFilters.gender === 'Homens'
+                            ? 'male'
+                            : 'all';
+                      }
+                      const { data: userRow } = await supabase
+                        .from('users')
+                        .select('privacy_settings')
+                        .eq('id', user.id)
+                        .maybeSingle();
+                      const currentPrivacy = userRow?.privacy_settings || {};
+                      updates.privacy_settings = { ...currentPrivacy, publicProfile: !tempInvisible };
+                      await supabase.from('users').update(updates).eq('id', user.id);
                     }
                   } catch (e) {
                     // non-blocking

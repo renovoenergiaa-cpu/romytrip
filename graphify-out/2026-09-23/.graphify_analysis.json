@@ -1,0 +1,1213 @@
+{
+  "communities": {
+    "0": [
+      "app_auth_login",
+      "app_auth_login_styles",
+      "app_auth_onboarding_step1_personal",
+      "app_auth_onboarding_step1_personal_step1personalscreen",
+      "app_auth_onboarding_step1_personal_styles",
+      "app_auth_onboarding_step2_trip",
+      "app_auth_onboarding_step2_trip_step2tripscreen",
+      "app_auth_onboarding_step2_trip_styles",
+      "app_auth_onboarding_step3_travelstyle",
+      "app_auth_onboarding_step3_travelstyle_step3travelstylescreen",
+      "app_auth_onboarding_step3_travelstyle_styles",
+      "app_auth_onboarding_step3_travelstyle_styleslist",
+      "app_auth_onboarding_step4_interests",
+      "app_auth_onboarding_step4_interests_interestslist",
+      "app_auth_onboarding_step4_interests_step4interestsscreen",
+      "app_auth_onboarding_step4_interests_styles",
+      "app_auth_onboarding_step5_social",
+      "app_auth_onboarding_step5_social_budgetoptions",
+      "app_auth_onboarding_step5_social_step5socialscreen",
+      "app_auth_onboarding_step5_social_styles",
+      "app_dev_seed",
+      "app_dev_seed_devseedscreen",
+      "app_dev_seed_mock_profiles",
+      "app_dev_seed_styles",
+      "app_notification_settings",
+      "app_notification_settings_getstyles",
+      "app_notification_settings_notificationsettingsscreen",
+      "ref_lucide_react_native",
+      "ref_react",
+      "ref_react_native_maps",
+      "src_components_birthdatepicker",
+      "src_components_birthdatepicker_birthdatepicker",
+      "src_components_birthdatepicker_birthdatepickerprops",
+      "src_components_birthdatepicker_months",
+      "src_components_birthdatepicker_styles",
+      "src_components_chip",
+      "src_components_chip_chip",
+      "src_components_chip_chipprops",
+      "src_components_chip_styles",
+      "src_components_cityautocomplete",
+      "src_components_cityautocomplete_cityautocomplete",
+      "src_components_cityautocomplete_cityautocompleteprops",
+      "src_components_cityautocomplete_photonfeature",
+      "src_components_cityautocomplete_styles",
+      "src_components_createcommunitymodal",
+      "src_components_createcommunitymodal_styles",
+      "src_components_createeventmodal",
+      "src_components_createeventmodal_available_event_icons",
+      "src_components_createeventmodal_createeventmodalprops",
+      "src_components_createeventmodal_styles",
+      "src_components_customdatepicker",
+      "src_components_customdatepicker_customdatepicker",
+      "src_components_customdatepicker_customdatepickerprops",
+      "src_components_customdatepicker_formatdatetobr",
+      "src_components_customdatepicker_pt_months",
+      "src_components_customdatepicker_pt_weekdays",
+      "src_components_customdatepicker_styles",
+      "src_components_custominput",
+      "src_components_custominput_custominput",
+      "src_components_custominput_custominputprops",
+      "src_components_custominput_styles",
+      "src_components_editeventmodal",
+      "src_components_editeventmodal_available_icons",
+      "src_components_editeventmodal_editeventmodalprops",
+      "src_components_editeventmodal_styles",
+      "src_components_emptystate",
+      "src_components_emptystate_emptystateprops",
+      "src_components_emptystate_styles",
+      "src_components_progressbar",
+      "src_components_progressbar_progressbar",
+      "src_components_progressbar_progressbarprops",
+      "src_components_progressbar_styles",
+      "src_components_romymap_native",
+      "src_components_romymap_native_eventmarker",
+      "src_components_romymap_native_romymap",
+      "src_components_romymap_native_romymapprops",
+      "src_components_romymap_native_styles",
+      "src_components_romymap_web",
+      "src_components_romymap_web_romymapprops",
+      "src_components_romymap_web_styles",
+      "src_store_onboardingstore",
+      "src_store_onboardingstore_onboardingstate",
+      "src_store_onboardingstore_useonboardingstore",
+      "src_theme_index",
+      "src_theme_index_colors",
+      "src_theme_index_darkcolors",
+      "src_theme_index_lightcolors",
+      "src_theme_index_spacing",
+      "src_theme_index_touchtarget",
+      "src_theme_index_typography"
+    ],
+    "1": [
+      "app_tabs_index",
+      "app_tabs_index_itunessong",
+      "app_tabs_index_romyfeedscreen",
+      "app_tabs_index_styles",
+      "app_tabs_index_width_height",
+      "ref_expo_av",
+      "ref_react_navigation_native",
+      "src_components_createeventmodal_createeventmodal",
+      "src_components_eventdetailsmodal",
+      "src_components_eventdetailsmodal_eventdetailsmodal",
+      "src_components_eventdetailsmodal_eventdetailsmodalprops",
+      "src_components_eventdetailsmodal_styles",
+      "src_components_feedpostitem",
+      "src_components_feedpostitem_feed_snap_height",
+      "src_components_feedpostitem_feedpostitem",
+      "src_components_feedpostitem_feedpostitem_loadandplay",
+      "src_components_feedpostitem_feedpostitem_unloadsound",
+      "src_components_feedpostitem_feedpostitemprops",
+      "src_components_feedpostitem_getshortdestination",
+      "src_components_feedpostitem_postitemdata",
+      "src_components_feedpostitem_styles",
+      "src_components_feedpostitem_width_height",
+      "src_components_romymap",
+      "src_components_romymap_web_romymap",
+      "src_hooks_useevents",
+      "src_hooks_useevents_getdistance",
+      "src_hooks_useevents_usecreateevent",
+      "src_hooks_useevents_useeventrequests",
+      "src_hooks_useevents_uselocalevents",
+      "src_hooks_useevents_userequestjoinevent",
+      "src_hooks_useevents_useupdateeventrequest",
+      "src_hooks_useevents_useusereventrequeststatus",
+      "src_hooks_usefeed",
+      "src_hooks_usefeed_usecomments",
+      "src_hooks_usefeed_usecreatecomment",
+      "src_hooks_usefeed_usecreatepost",
+      "src_hooks_usefeed_usedeletefeedpost",
+      "src_hooks_usefeed_usefeed",
+      "src_hooks_usefeed_usepostlikes",
+      "src_hooks_usefeed_usetogglepostlike",
+      "src_hooks_usefeed_useupdatepostcaption",
+      "src_lib_supabase",
+      "src_lib_supabase_authstorage",
+      "src_lib_supabase_default_anon_key_parts",
+      "src_lib_supabase_supabase",
+      "src_lib_supabase_supabaseanonkey",
+      "src_lib_supabase_supabaseurl"
+    ],
+    "2": [
+      "package_dependencies",
+      "package_dependencies_base64_arraybuffer",
+      "package_dependencies_expo",
+      "package_dependencies_expo_av",
+      "package_dependencies_expo_blur",
+      "package_dependencies_expo_camera",
+      "package_dependencies_expo_constants",
+      "package_dependencies_expo_file_system",
+      "package_dependencies_expo_font",
+      "package_dependencies_expo_haptics",
+      "package_dependencies_expo_image",
+      "package_dependencies_expo_image_picker",
+      "package_dependencies_expo_linear_gradient",
+      "package_dependencies_expo_linking",
+      "package_dependencies_expo_location",
+      "package_dependencies_expo_notifications",
+      "package_dependencies_expo_router",
+      "package_dependencies_expo_splash_screen",
+      "package_dependencies_expo_status_bar",
+      "package_dependencies_expo_symbols",
+      "package_dependencies_expo_system_ui",
+      "package_dependencies_expo_task_manager",
+      "package_dependencies_expo_vector_icons",
+      "package_dependencies_expo_web_browser",
+      "package_dependencies_lucide_react_native",
+      "package_dependencies_react",
+      "package_dependencies_react_dom",
+      "package_dependencies_react_native",
+      "package_dependencies_react_native_async_storage_async_storage",
+      "package_dependencies_react_native_community_datetimepicker",
+      "package_dependencies_react_native_gesture_handler",
+      "package_dependencies_react_native_google_places_autocomplete",
+      "package_dependencies_react_native_maps",
+      "package_dependencies_react_native_reanimated",
+      "package_dependencies_react_native_safe_area_context",
+      "package_dependencies_react_native_screens",
+      "package_dependencies_react_native_url_polyfill",
+      "package_dependencies_react_native_web",
+      "package_dependencies_react_native_worklets",
+      "package_dependencies_react_navigation_bottom_tabs",
+      "package_dependencies_react_navigation_elements",
+      "package_dependencies_react_navigation_native",
+      "package_dependencies_supabase_supabase_js",
+      "package_dependencies_tanstack_react_query",
+      "package_dependencies_zustand"
+    ],
+    "3": [
+      "app_tabs_create",
+      "app_tabs_create_createplaceholder",
+      "components_parallax_scroll_view",
+      "components_parallax_scroll_view_parallaxscrollview",
+      "components_parallax_scroll_view_props",
+      "components_parallax_scroll_view_styles",
+      "components_themed_text",
+      "components_themed_text_styles",
+      "components_themed_text_themedtext",
+      "components_themed_text_themedtextprops",
+      "components_themed_view",
+      "components_themed_view_themedview",
+      "components_themed_view_themedviewprops",
+      "components_ui_collapsible",
+      "components_ui_collapsible_collapsible",
+      "components_ui_collapsible_styles",
+      "components_ui_icon_symbol",
+      "components_ui_icon_symbol_iconmapping",
+      "components_ui_icon_symbol_iconsymbol",
+      "components_ui_icon_symbol_iconsymbolname",
+      "components_ui_icon_symbol_ios",
+      "components_ui_icon_symbol_ios_iconsymbol",
+      "components_ui_icon_symbol_mapping",
+      "constants_theme",
+      "constants_theme_colors",
+      "constants_theme_fonts",
+      "hooks_use_color_scheme",
+      "hooks_use_color_scheme_usecolorscheme",
+      "hooks_use_color_scheme_web",
+      "hooks_use_color_scheme_web_usecolorscheme",
+      "hooks_use_theme_color",
+      "hooks_use_theme_color_usethemecolor",
+      "ref_expo_symbols",
+      "ref_expo_vector_icons",
+      "ref_react_native"
+    ],
+    "4": [
+      "scratch_flight_service_compiled",
+      "scratch_flight_service_compiled_catch",
+      "scratch_flight_service_compiled_formatisoduration",
+      "scratch_flight_service_compiled_formatisotime",
+      "scratch_flight_service_compiled_getcarrierlogo",
+      "scratch_flight_service_compiled_toisodate",
+      "scratch_test_service",
+      "scratch_test_service_runtest",
+      "scratch_test_service_searchrealflights_builddirectairlineurl_buildgoogleflightsurl",
+      "src_components_proximaviagemscreen",
+      "src_components_proximaviagemscreen_getinitialflightdates",
+      "src_components_proximaviagemscreen_pricedate",
+      "src_components_proximaviagemscreen_proximaviagemscreen",
+      "src_components_proximaviagemscreen_s",
+      "src_components_proximaviagemscreen_width_height",
+      "src_services_flightservice",
+      "src_services_flightservice_airline_logos",
+      "src_services_flightservice_builddecolarurl",
+      "src_services_flightservice_builddirectairlineurl",
+      "src_services_flightservice_buildgoogleflightsurl",
+      "src_services_flightservice_buildkayakurl",
+      "src_services_flightservice_createduffelcheckoutlink",
+      "src_services_flightservice_flightresult",
+      "src_services_flightservice_flightsearchparams",
+      "src_services_flightservice_formatisoduration",
+      "src_services_flightservice_formatisotime",
+      "src_services_flightservice_generaterealisticbenchmarkflights",
+      "src_services_flightservice_getcarrierlogo",
+      "src_services_flightservice_searchduffel",
+      "src_services_flightservice_searchgoogleflightslive",
+      "src_services_flightservice_searchrealflights",
+      "src_services_flightservice_searchserpapigoogleflights",
+      "src_services_flightservice_toisodate"
+    ],
+    "5": [
+      "app",
+      "app_adaptiveicon_backgroundcolor",
+      "app_adaptiveicon_backgroundimage",
+      "app_adaptiveicon_foregroundimage",
+      "app_adaptiveicon_monochromeimage",
+      "app_android_adaptiveicon",
+      "app_android_edgetoedgeenabled",
+      "app_android_package",
+      "app_android_predictivebackgestureenabled",
+      "app_experiments_reactcompiler",
+      "app_experiments_typedroutes",
+      "app_expo",
+      "app_expo_android",
+      "app_expo_experiments",
+      "app_expo_icon",
+      "app_expo_ios",
+      "app_expo_name",
+      "app_expo_newarchenabled",
+      "app_expo_orientation",
+      "app_expo_plugins",
+      "app_expo_scheme",
+      "app_expo_slug",
+      "app_expo_userinterfacestyle",
+      "app_expo_version",
+      "app_expo_web",
+      "app_infoplist_nscamerausagedescription",
+      "app_infoplist_nsmicrophoneusagedescription",
+      "app_ios_bundleidentifier",
+      "app_ios_infoplist",
+      "app_ios_supportstablet",
+      "app_web_favicon",
+      "app_web_output"
+    ],
+    "6": [
+      "app_auth_layout",
+      "app_auth_layout_authlayout",
+      "app_auth_login_loginscreen",
+      "app_auth_onboarding_layout",
+      "app_auth_onboarding_layout_onboardinglayout",
+      "app_auth_onboarding_step6_connections",
+      "app_auth_onboarding_step6_connections_gender_prefs",
+      "app_auth_onboarding_step6_connections_intentions",
+      "app_auth_onboarding_step6_connections_step6connectionsscreen",
+      "app_auth_onboarding_step6_connections_styles",
+      "app_html",
+      "app_html_root",
+      "app_index",
+      "app_index_index",
+      "app_modals_paywall",
+      "app_modals_paywall_faqitem",
+      "app_modals_paywall_featureitem",
+      "app_modals_paywall_paywallscreen",
+      "app_modals_paywall_styles",
+      "app_tabs_layout",
+      "app_tabs_layout_styles",
+      "app_tabs_layout_tablayout",
+      "ref_base64_arraybuffer",
+      "ref_expo_router",
+      "ref_supabase_supabase_js",
+      "src_context_authcontext",
+      "src_context_authcontext_authcontext",
+      "src_context_authcontext_authcontexttype",
+      "src_context_authcontext_authprovider",
+      "src_context_authcontext_checkprofilecomplete",
+      "src_context_authcontext_useauth"
+    ],
+    "7": [
+      "ref_fs",
+      "ref_path",
+      "ref_readline",
+      "scratch_inspect_callbacks",
+      "scratch_inspect_callbacks_checkgf2",
+      "scratch_inspect_callbacks_fs",
+      "scratch_inspect_gf",
+      "scratch_inspect_gf_checkgf",
+      "scratch_inspect_gf_fs",
+      "scratch_inspect_tree",
+      "scratch_inspect_tree_data",
+      "scratch_inspect_tree_fs",
+      "scratch_inspect_tree_raw",
+      "scratch_make_compiled",
+      "scratch_make_compiled_cjs",
+      "scratch_make_compiled_fs",
+      "scratch_make_compiled_tssource",
+      "scripts_patch_image_size",
+      "scripts_patch_image_size_candidates",
+      "scripts_patch_image_size_fs",
+      "scripts_patch_image_size_patchfile",
+      "scripts_patch_image_size_path",
+      "scripts_reset_project",
+      "scripts_reset_project_exampledirpath",
+      "scripts_reset_project_fs",
+      "scripts_reset_project_movedirectories",
+      "scripts_reset_project_olddirs",
+      "scripts_reset_project_path",
+      "scripts_reset_project_readline",
+      "scripts_reset_project_rl",
+      "scripts_reset_project_root"
+    ],
+    "8": [
+      "app_chat_id",
+      "app_chat_id_audioplayer",
+      "app_chat_id_chatdetailscreen",
+      "app_chat_id_getstyles",
+      "app_chat_id_width_screen_width_height_screen_height",
+      "app_tabs_chat",
+      "app_tabs_chat_chatscreen",
+      "app_tabs_chat_getstyles",
+      "ref_expo_camera",
+      "ref_expo_file_system",
+      "src_hooks_useconnections_useacceptedconnections",
+      "src_hooks_usemessenger",
+      "src_hooks_usemessenger_conversation",
+      "src_hooks_usemessenger_message",
+      "src_hooks_usemessenger_translatetext",
+      "src_hooks_usemessenger_usearchiveconversation",
+      "src_hooks_usemessenger_useconversations",
+      "src_hooks_usemessenger_usecurrentuserid",
+      "src_hooks_usemessenger_usedeleteconversation",
+      "src_hooks_usemessenger_useleaveconversation",
+      "src_hooks_usemessenger_usemessages",
+      "src_hooks_usemessenger_usemuteconversation",
+      "src_hooks_usemessenger_usesendmessage",
+      "src_hooks_usemessenger_usestartconversation",
+      "src_services_notifications",
+      "src_services_notifications_registerforpushnotifications",
+      "src_services_notifications_schedulelocalnotification",
+      "src_services_notifications_sendpushnotification"
+    ],
+    "9": [
+      "app_community_id",
+      "app_community_id_communityscreen",
+      "app_community_id_getstyles",
+      "app_tabs_communities",
+      "app_tabs_communities_communitiesscreen",
+      "app_tabs_communities_communitycard",
+      "app_tabs_communities_s",
+      "app_tabs_communities_type_colors",
+      "app_tabs_communities_typecolors",
+      "app_tabs_communities_typeicon",
+      "src_components_createcommunitymodal_createcommunitymodal",
+      "src_components_editeventmodal_editeventmodal",
+      "src_hooks_usecommunities",
+      "src_hooks_usecommunities_usecommunities",
+      "src_hooks_usecommunities_usecommunity",
+      "src_hooks_usecommunities_usecommunitymembers",
+      "src_hooks_usecommunities_usecommunityposts",
+      "src_hooks_usecommunities_usecreatecommunity",
+      "src_hooks_usecommunities_usecreatecommunitypost",
+      "src_hooks_usecommunities_usedeletecommunity",
+      "src_hooks_usecommunities_usedeletecommunitypost",
+      "src_hooks_usecommunities_usejoincommunity",
+      "src_hooks_usecommunities_usemycommunities",
+      "src_hooks_usecommunities_useupdatecommunitycover",
+      "src_hooks_usecommunities_useupdatecommunityicon",
+      "src_hooks_useevents_usedeleteevent",
+      "src_hooks_useevents_usemyevents",
+      "src_hooks_useevents_useupdateevent"
+    ],
+    "10": [
+      "package",
+      "package_main",
+      "package_name",
+      "package_private",
+      "package_version",
+      "ref_expo_constants",
+      "ref_expo_font",
+      "ref_expo_image",
+      "ref_expo_linking",
+      "ref_expo_location",
+      "ref_expo_notifications",
+      "ref_expo_splash_screen",
+      "ref_expo_status_bar",
+      "ref_expo_system_ui",
+      "ref_expo_task_manager",
+      "ref_react_dom",
+      "ref_react_native_community_datetimepicker",
+      "ref_react_native_gesture_handler",
+      "ref_react_native_google_places_autocomplete",
+      "ref_react_native_screens",
+      "ref_react_native_url_polyfill",
+      "ref_react_native_web",
+      "ref_react_native_worklets",
+      "ref_types_react",
+      "ref_typescript"
+    ],
+    "11": [
+      "app_free_status",
+      "app_free_status_freestatusscreen",
+      "app_free_status_styles",
+      "app_help_board",
+      "app_help_board_cat",
+      "app_help_board_catconf",
+      "app_help_board_categories",
+      "app_help_board_categorykey",
+      "app_help_board_helpboardscreen",
+      "app_help_board_s",
+      "ref_expo_blur",
+      "src_components_discoverymodal_discoverymodal",
+      "src_hooks_usediscovery",
+      "src_hooks_usediscovery_usecreatehelpreply",
+      "src_hooks_usediscovery_usecreatehelprequest",
+      "src_hooks_usediscovery_usedeletehelprequest",
+      "src_hooks_usediscovery_usefreeusers",
+      "src_hooks_usediscovery_usehelpreplies",
+      "src_hooks_usediscovery_usehelprequests",
+      "src_hooks_usediscovery_uselocalevents",
+      "src_hooks_usediscovery_useresolvehelprequest",
+      "src_hooks_usediscovery_usetogglefreestatus",
+      "src_hooks_usediscovery_useupdatehelprequest"
+    ],
+    "12": [
+      "app_layout",
+      "app_layout_appshell",
+      "app_layout_errorboundary",
+      "app_layout_errorboundary_constructor",
+      "app_layout_errorboundary_getderivedstatefromerror",
+      "app_layout_errorboundary_render",
+      "app_layout_rootlayout",
+      "ref_tanstack_react_query",
+      "src_components_inappmessagebanner",
+      "src_components_inappmessagebanner_inappmessagebanner",
+      "src_components_inappmessagebanner_styles",
+      "src_components_incomingcallbanner",
+      "src_components_incomingcallbanner_incomingcallbanner",
+      "src_components_incomingcallbanner_styles",
+      "src_components_incomingcallbanner_width_screen_width",
+      "src_context_globalnotificationcontext",
+      "src_context_globalnotificationcontext_globalnotificationcontext",
+      "src_context_globalnotificationcontext_globalnotificationcontexttype",
+      "src_context_globalnotificationcontext_globalnotificationprovider",
+      "src_context_globalnotificationcontext_inappbanner",
+      "src_context_globalnotificationcontext_incomingcall",
+      "src_context_globalnotificationcontext_useglobalnotification"
+    ],
+    "13": [
+      "c_users_pc_desktop_romy_0_1_scratch_dist_flightservice_builddecolarurl",
+      "c_users_pc_desktop_romy_0_1_scratch_dist_flightservice_builddirectairlineurl",
+      "c_users_pc_desktop_romy_0_1_scratch_dist_flightservice_buildgoogleflightsurl",
+      "c_users_pc_desktop_romy_0_1_scratch_dist_flightservice_buildkayakurl",
+      "c_users_pc_desktop_romy_0_1_scratch_dist_flightservice_searchgoogleflightslive",
+      "c_users_pc_desktop_romy_0_1_scratch_dist_flightservice_searchrealflights",
+      "c_users_pc_desktop_romy_0_1_scratch_dist_flightservice_toisodate",
+      "scratch_dist_flightservice",
+      "scratch_test_booking_url",
+      "scratch_test_booking_url_searchrealflights",
+      "scratch_test_booking_url_testbookinglinks",
+      "scratch_test_flight_verification",
+      "scratch_test_flight_verification_runtests",
+      "scratch_test_flight_verification_runtests_assert",
+      "scratch_test_flight_verification_searchgoogleflightslive_searchrealflights_builddirectairlineurl_buildgoogleflightsurl_buildkayakurl_builddecolarurl_toisodate"
+    ],
+    "14": [
+      "app_settings",
+      "app_settings_getstyles",
+      "app_settings_settingsscreen",
+      "ref_react_native_async_storage_async_storage",
+      "ref_react_native_safe_area_context",
+      "ref_zustand",
+      "src_components_screenheader",
+      "src_components_screenheader_screenheader",
+      "src_components_screenheader_screenheaderprops",
+      "src_components_screenheader_styles",
+      "src_store_themestore",
+      "src_store_themestore_thememode",
+      "src_store_themestore_themestate",
+      "src_store_themestore_usethemestore"
+    ],
+    "15": [
+      "app_tabs_connections",
+      "app_tabs_connections_connectionsscreen",
+      "app_tabs_connections_getstyles",
+      "app_tabs_connections_width_screen_width",
+      "components_hello_wave",
+      "components_hello_wave_hellowave",
+      "ref_react_native_reanimated",
+      "src_components_travelerprofilecard",
+      "src_components_travelerprofilecard_styles",
+      "src_components_travelerprofilecard_travelerprofilecard",
+      "src_components_travelerprofilecard_travelerprofilecardprops",
+      "src_components_travelerprofilecard_width",
+      "src_hooks_useconnections_usediscoverytravelers"
+    ],
+    "16": [
+      "app_tabs_profile",
+      "app_tabs_profile_getstyles",
+      "app_tabs_profile_profilescreen",
+      "src_components_emptystate_emptystate",
+      "src_components_skeletonloader",
+      "src_components_skeletonloader_skeletonchatrow",
+      "src_components_skeletonloader_skeletoncircle",
+      "src_components_skeletonloader_skeletonline",
+      "src_components_skeletonloader_skeletonprofileheader",
+      "src_components_skeletonloader_skeletonprops",
+      "src_components_skeletonloader_skeletonstyles",
+      "src_theme_index_usetheme"
+    ],
+    "17": [
+      "app_user_id",
+      "app_user_id_publicprofilescreen",
+      "app_user_id_styles",
+      "app_user_id_width",
+      "src_hooks_useconnections",
+      "src_hooks_useconnections_discoveryfilters",
+      "src_hooks_useconnections_useconnectionstatus",
+      "src_hooks_useconnections_userequestconnection",
+      "src_hooks_useconnections_useuserprofile",
+      "src_theme_index_shadows"
+    ],
+    "18": [
+      "src_components_matchingactionbutton",
+      "src_components_matchingactionbutton_animatedpressable",
+      "src_components_matchingactionbutton_matchingactionbutton",
+      "src_components_matchingactionbutton_matchingactionbuttonprops",
+      "src_components_matchingactionbutton_matchingactiontype",
+      "src_components_matchingactionbutton_styles",
+      "src_theme_index_motion",
+      "src_theme_motion",
+      "src_theme_motion_motion",
+      "src_theme_motion_motionpresets"
+    ],
+    "19": [
+      "app_edit_profile",
+      "app_edit_profile_available_availabilities",
+      "app_edit_profile_available_budgets",
+      "app_edit_profile_available_interests",
+      "app_edit_profile_available_languages",
+      "app_edit_profile_editprofilescreen",
+      "app_edit_profile_getstyles",
+      "app_edit_profile_quick_objectives",
+      "ref_expo_image_picker"
+    ],
+    "20": [
+      "package_metro_ws",
+      "package_overrides",
+      "package_overrides_decode_uri_component",
+      "package_overrides_image_size",
+      "package_overrides_metro",
+      "package_overrides_postcss",
+      "package_overrides_react_devtools_core",
+      "package_overrides_uuid",
+      "package_react_devtools_core_ws"
+    ],
+    "21": [
+      "package_scripts",
+      "package_scripts_android",
+      "package_scripts_build",
+      "package_scripts_ios",
+      "package_scripts_lint",
+      "package_scripts_postinstall",
+      "package_scripts_reset_project",
+      "package_scripts_start",
+      "package_scripts_web"
+    ],
+    "22": [
+      "ref_expo_tsconfig_base",
+      "tsconfig",
+      "tsconfig_compileroptions",
+      "tsconfig_compileroptions_paths",
+      "tsconfig_compileroptions_strict",
+      "tsconfig_extends",
+      "tsconfig_include"
+    ],
+    "23": [
+      "auth",
+      "public_handle_new_user",
+      "supabase_schema",
+      "supabase_schema_on_auth_user_created",
+      "supabase_schema_public_handle_new_user",
+      "supabase_schema_public_users"
+    ],
+    "24": [
+      "supabase_communities",
+      "supabase_communities_public_communities",
+      "supabase_communities_public_community_members",
+      "supabase_communities_public_community_posts",
+      "supabase_communities_sql_public_conversations",
+      "supabase_communities_sql_public_users"
+    ],
+    "25": [
+      "app_help_support",
+      "app_help_support_faq_list",
+      "app_help_support_faqitem",
+      "app_help_support_getstyles",
+      "app_help_support_helpsupportscreen"
+    ],
+    "26": [
+      "app_notifications",
+      "app_notifications_getstyles",
+      "app_notifications_notificationsscreen",
+      "src_hooks_useconnections_usependingrequests",
+      "src_hooks_useconnections_userespondconnection"
+    ],
+    "27": [
+      "components_haptic_tab",
+      "components_haptic_tab_haptictab",
+      "ref_expo_haptics",
+      "ref_react_navigation_bottom_tabs",
+      "ref_react_navigation_elements"
+    ],
+    "28": [
+      "eslint_config",
+      "eslint_config_defineconfig",
+      "eslint_config_expoconfig",
+      "ref_eslint",
+      "ref_eslint_config_expo"
+    ],
+    "29": [
+      "package_devdependencies",
+      "package_devdependencies_eslint",
+      "package_devdependencies_eslint_config_expo",
+      "package_devdependencies_types_react",
+      "package_devdependencies_typescript"
+    ],
+    "30": [
+      "ref_expo_linear_gradient",
+      "src_components_discoverymodal",
+      "src_components_discoverymodal_discoverymodalprops",
+      "src_components_discoverymodal_styles",
+      "src_theme_index_radius"
+    ],
+    "31": [
+      "supabase_interactions",
+      "supabase_interactions_public_comments",
+      "supabase_interactions_public_post_likes",
+      "supabase_interactions_sql_public_posts",
+      "supabase_interactions_sql_public_users"
+    ],
+    "32": [
+      "supabase_messenger",
+      "supabase_messenger_public_conversation_participants",
+      "supabase_messenger_public_conversations",
+      "supabase_messenger_public_messages",
+      "supabase_messenger_sql_public_users"
+    ],
+    "33": [
+      "vercel",
+      "vercel_buildcommand",
+      "vercel_headers",
+      "vercel_outputdirectory",
+      "vercel_rewrites"
+    ],
+    "34": [
+      "app_privacy_security",
+      "app_privacy_security_default_privacy",
+      "app_privacy_security_getstyles",
+      "app_privacy_security_privacysecurityscreen"
+    ],
+    "35": [
+      "components_external_link",
+      "components_external_link_externallink",
+      "components_external_link_props",
+      "ref_expo_web_browser"
+    ],
+    "36": [
+      "database_events_schema",
+      "database_events_schema_public_event_requests",
+      "database_events_schema_public_local_events",
+      "database_events_schema_sql_public_users"
+    ],
+    "37": [
+      "metro_config",
+      "metro_config_config",
+      "metro_config_getdefaultconfig",
+      "ref_expo"
+    ],
+    "38": [
+      "minor_age_restriction",
+      "minor_age_restriction_public_check_user_minimum_age",
+      "minor_age_restriction_trg_enforce_user_minimum_age",
+      "public_check_user_minimum_age"
+    ],
+    "39": [
+      "pentest_fixes_round3",
+      "pentest_fixes_round3_public_help_replies",
+      "pentest_fixes_round3_sql_public_help_requests",
+      "pentest_fixes_round3_sql_public_users"
+    ],
+    "40": [
+      "supabase_discovery",
+      "supabase_discovery_public_events",
+      "supabase_discovery_public_help_requests",
+      "supabase_discovery_sql_public_users"
+    ],
+    "41": [
+      "deploy_all_rls",
+      "deploy_all_rls_public_is_conversation_member",
+      "deploy_all_rls_sql_public_conversation_participants"
+    ],
+    "42": [
+      "ref_jsr_supabase",
+      "supabase_functions_translate_message_index",
+      "supabase_functions_translate_message_index_deepl_api_key"
+    ],
+    "43": [
+      "scratch_find_flights",
+      "scratch_find_flights_run",
+      "scratch_find_flights_run_searcharrays"
+    ],
+    "44": [
+      "scratch_test_complete_flow",
+      "scratch_test_complete_flow_searchflightsgoogle",
+      "scratch_test_complete_flow_test"
+    ],
+    "45": [
+      "scratch_test_gf_parser",
+      "scratch_test_gf_parser_parsegoogleflightshtml",
+      "scratch_test_gf_parser_test"
+    ],
+    "46": [
+      "scratch_test_intl",
+      "scratch_test_intl_run",
+      "scratch_test_intl_testroute"
+    ],
+    "47": [
+      "scratch_test_query_syntax",
+      "scratch_test_query_syntax_run",
+      "scratch_test_query_syntax_testenglish"
+    ],
+    "48": [
+      "scratch_test_routes",
+      "scratch_test_routes_run",
+      "scratch_test_routes_testroute"
+    ],
+    "49": [
+      "scratch_test_trips",
+      "scratch_test_trips_run",
+      "scratch_test_trips_testsearch"
+    ],
+    "50": [
+      "supabase_connections",
+      "supabase_connections_public_connections",
+      "supabase_connections_sql_public_users"
+    ],
+    "51": [
+      "supabase_functions_translate_message_deno",
+      "supabase_functions_translate_message_deno_imports",
+      "supabase_functions_translate_message_deno_imports_supabase_functions_js"
+    ],
+    "52": [
+      "supabase_messenger_fix",
+      "supabase_messenger_fix_public_is_conversation_member",
+      "supabase_messenger_fix_sql_public_conversation_participants"
+    ],
+    "53": [
+      "supabase_posts",
+      "supabase_posts_public_posts",
+      "supabase_posts_sql_public_users"
+    ],
+    "54": [
+      "babel_plugin_replace_import_meta",
+      "babel_plugin_replace_import_meta_metaproperty"
+    ],
+    "55": [
+      "scratch_check_grid",
+      "scratch_check_grid_checkdategrid"
+    ],
+    "56": [
+      "scratch_inspect_seg",
+      "scratch_inspect_seg_run"
+    ],
+    "57": [
+      "scratch_parse_all",
+      "scratch_parse_all_run"
+    ],
+    "58": [
+      "scratch_test_booking_link",
+      "scratch_test_booking_link_testbookinglink"
+    ],
+    "59": [
+      "scratch_test_cabin",
+      "scratch_test_cabin_testcabin"
+    ],
+    "60": [
+      "scratch_test_clean",
+      "scratch_test_clean_cleaned"
+    ],
+    "61": [
+      "scratch_test_duffel",
+      "scratch_test_duffel_test"
+    ],
+    "62": [
+      "scratch_test_duffel_links",
+      "scratch_test_duffel_links_test"
+    ],
+    "63": [
+      "scratch_test_gf",
+      "scratch_test_gf_testgoogleflightsscrape"
+    ],
+    "64": [
+      "scratch_test_passengers",
+      "scratch_test_passengers_testpassengers"
+    ],
+    "65": [
+      "scratch_test_tfs",
+      "scratch_test_tfs_testtfs"
+    ],
+    "66": [
+      "src_utils_cities",
+      "src_utils_cities_popular_cities"
+    ],
+    "67": [
+      "babel_config"
+    ],
+    "68": [
+      "deploy_all_rls_sql_public_conversations"
+    ],
+    "69": [
+      "deploy_all_rls_sql_public_help_requests"
+    ],
+    "70": [
+      "deploy_all_rls_sql_public_messages"
+    ],
+    "71": [
+      "deploy_all_rls_sql_public_posts"
+    ],
+    "72": [
+      "deploy_all_rls_sql_public_users"
+    ],
+    "73": [
+      "pentest_fixes"
+    ],
+    "74": [
+      "pentest_fixes_round2"
+    ],
+    "75": [
+      "pentest_fixes_round2_sql_public_users"
+    ],
+    "76": [
+      "pentest_fixes_sql_public_users"
+    ],
+    "77": [
+      "public_comments"
+    ],
+    "78": [
+      "public_communities"
+    ],
+    "79": [
+      "public_community_members"
+    ],
+    "80": [
+      "public_community_posts"
+    ],
+    "81": [
+      "public_connections"
+    ],
+    "82": [
+      "public_event_requests"
+    ],
+    "83": [
+      "public_events"
+    ],
+    "84": [
+      "public_local_events"
+    ],
+    "85": [
+      "public_post_likes"
+    ],
+    "86": [
+      "security_and_lgpd_fix"
+    ],
+    "87": [
+      "security_hardening"
+    ],
+    "88": [
+      "storage_objects"
+    ],
+    "89": [
+      "supabase_audio"
+    ],
+    "90": [
+      "supabase_audio_sql_public_messages"
+    ],
+    "91": [
+      "supabase_chat_settings"
+    ],
+    "92": [
+      "supabase_chat_settings_sql_public_conversation_participants"
+    ],
+    "93": [
+      "supabase_communities_fix"
+    ],
+    "94": [
+      "supabase_messages_media"
+    ],
+    "95": [
+      "supabase_messages_media_sql_public_messages"
+    ],
+    "96": [
+      "supabase_push_token"
+    ],
+    "97": [
+      "supabase_push_token_sql_public_users"
+    ],
+    "98": [
+      "supabase_read_messages"
+    ],
+    "99": [
+      "supabase_storage"
+    ]
+  },
+  "cohesion": {
+    "0": 0.05543071161048689,
+    "1": 0.08140610545790934,
+    "2": 0.044444444444444446,
+    "3": 0.10084033613445378,
+    "4": 0.17613636363636365,
+    "5": 0.0625,
+    "6": 0.09247311827956989,
+    "7": 0.06666666666666667,
+    "8": 0.19047619047619047,
+    "9": 0.1455026455026455,
+    "10": 0.08,
+    "11": 0.15810276679841898,
+    "12": 0.12987012987012986,
+    "13": 0.14285714285714285,
+    "14": 0.1978021978021978,
+    "15": 0.20512820512820512,
+    "16": 0.25757575757575757,
+    "17": 0.3333333333333333,
+    "18": 0.2,
+    "19": 0.25,
+    "20": 0.2222222222222222,
+    "21": 0.2222222222222222,
+    "22": 0.2857142857142857,
+    "23": 0.3333333333333333,
+    "24": 0.6,
+    "25": 0.5,
+    "26": 0.7,
+    "27": 0.4,
+    "28": 0.4,
+    "29": 0.4,
+    "30": 0.4,
+    "31": 0.6,
+    "32": 0.7,
+    "33": 0.4,
+    "34": 0.6666666666666666,
+    "35": 0.5,
+    "36": 0.8333333333333334,
+    "37": 0.5,
+    "38": 0.5,
+    "39": 0.5,
+    "40": 0.5,
+    "41": 0.6666666666666666,
+    "42": 0.6666666666666666,
+    "43": 0.6666666666666666,
+    "44": 1.0,
+    "45": 1.0,
+    "46": 1.0,
+    "47": 1.0,
+    "48": 1.0,
+    "49": 1.0,
+    "50": 0.6666666666666666,
+    "51": 0.6666666666666666,
+    "52": 0.6666666666666666,
+    "53": 0.6666666666666666,
+    "54": 1.0,
+    "55": 1.0,
+    "56": 1.0,
+    "57": 1.0,
+    "58": 1.0,
+    "59": 1.0,
+    "60": 1.0,
+    "61": 1.0,
+    "62": 1.0,
+    "63": 1.0,
+    "64": 1.0,
+    "65": 1.0,
+    "66": 1.0,
+    "67": 1.0,
+    "68": 1.0,
+    "69": 1.0,
+    "70": 1.0,
+    "71": 1.0,
+    "72": 1.0,
+    "73": 1.0,
+    "74": 1.0,
+    "75": 1.0,
+    "76": 1.0,
+    "77": 1.0,
+    "78": 1.0,
+    "79": 1.0,
+    "80": 1.0,
+    "81": 1.0,
+    "82": 1.0,
+    "83": 1.0,
+    "84": 1.0,
+    "85": 1.0,
+    "86": 1.0,
+    "87": 1.0,
+    "88": 1.0,
+    "89": 1.0,
+    "90": 1.0,
+    "91": 1.0,
+    "92": 1.0,
+    "93": 1.0,
+    "94": 1.0,
+    "95": 1.0,
+    "96": 1.0,
+    "97": 1.0,
+    "98": 1.0,
+    "99": 1.0
+  },
+  "gods": [
+    {
+      "id": "ref_react_native",
+      "label": "react-native",
+      "degree": 67
+    },
+    {
+      "id": "ref_react",
+      "label": "react",
+      "degree": 51
+    },
+    {
+      "id": "src_theme_index_usetheme",
+      "label": "useTheme()",
+      "degree": 47
+    },
+    {
+      "id": "ref_lucide_react_native",
+      "label": "lucide-react-native",
+      "degree": 42
+    },
+    {
+      "id": "src_theme_index_spacing",
+      "label": "spacing",
+      "degree": 39
+    },
+    {
+      "id": "src_theme_index_typography",
+      "label": "typography",
+      "degree": 37
+    },
+    {
+      "id": "ref_expo_router",
+      "label": "expo-router",
+      "degree": 34
+    },
+    {
+      "id": "src_theme_index_colors",
+      "label": "colors",
+      "degree": 29
+    },
+    {
+      "id": "src_lib_supabase_supabase",
+      "label": "supabase",
+      "degree": 24
+    },
+    {
+      "id": "src_store_onboardingstore_useonboardingstore",
+      "label": "useOnboardingStore",
+      "degree": 18
+    }
+  ],
+  "surprises": [
+    {
+      "source": "AudioPlayer()",
+      "target": "useTheme()",
+      "source_files": [
+        "app/chat/[id].tsx",
+        "src/theme/index.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "connects across different repos/directories; bridges separate communities; peripheral node `AudioPlayer()` unexpectedly reaches hub `useTheme()`"
+    },
+    {
+      "source": "Step1PersonalScreen()",
+      "target": "useOnboardingStore",
+      "source_files": [
+        "app/(auth)/onboarding/step1-personal.tsx",
+        "src/store/onboardingStore.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "connects across different repos/directories; peripheral node `Step1PersonalScreen()` unexpectedly reaches hub `useOnboardingStore`"
+    },
+    {
+      "source": "Step2TripScreen()",
+      "target": "useOnboardingStore",
+      "source_files": [
+        "app/(auth)/onboarding/step2-trip.tsx",
+        "src/store/onboardingStore.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "connects across different repos/directories; peripheral node `Step2TripScreen()` unexpectedly reaches hub `useOnboardingStore`"
+    },
+    {
+      "source": "Step3TravelStyleScreen()",
+      "target": "useOnboardingStore",
+      "source_files": [
+        "app/(auth)/onboarding/step3-travelstyle.tsx",
+        "src/store/onboardingStore.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "connects across different repos/directories; peripheral node `Step3TravelStyleScreen()` unexpectedly reaches hub `useOnboardingStore`"
+    },
+    {
+      "source": "Step4InterestsScreen()",
+      "target": "useOnboardingStore",
+      "source_files": [
+        "app/(auth)/onboarding/step4-interests.tsx",
+        "src/store/onboardingStore.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "connects across different repos/directories; peripheral node `Step4InterestsScreen()` unexpectedly reaches hub `useOnboardingStore`"
+    }
+  ],
+  "questions": [
+    {
+      "type": "bridge_node",
+      "question": "Why does `react-native` connect `react-native` to `theme/index.ts`, `(tabs)/index.tsx`, `ProximaViagemScreen.tsx`, `expo-router`, `chat/[id].tsx`, `communities.tsx`, `package.json`, `help-board.tsx`, `app/_layout.tsx`, `settings.tsx`, `connections.tsx`, `useTheme`, `user/[id].tsx`, `MatchingActionButton.tsx`, `edit-profile.tsx`, `help-support.tsx`, `notifications.tsx`, `DiscoveryModal.tsx`, `privacy-security.tsx`?",
+      "why": "High betweenness centrality (0.111) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `dependencies` connect `dependencies` to `package.json`?",
+      "why": "High betweenness centrality (0.078) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `react` connect `theme/index.ts` to `(tabs)/index.tsx`, `privacy-security.tsx`, `external-link.tsx`, `react-native`, `ProximaViagemScreen.tsx`, `expo-router`, `chat/[id].tsx`, `communities.tsx`, `package.json`, `help-board.tsx`, `app/_layout.tsx`, `settings.tsx`, `connections.tsx`, `useTheme`, `MatchingActionButton.tsx`, `edit-profile.tsx`, `help-support.tsx`, `DiscoveryModal.tsx`?",
+      "why": "High betweenness centrality (0.073) - this node is a cross-community bridge."
+    },
+    {
+      "type": "isolated_nodes",
+      "question": "What connects `BirthDatePickerProps`, `ChipProps`, `CityAutocompleteProps` to the rest of the system?",
+      "why": "266 weakly-connected nodes found - possible documentation gaps or missing edges."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `theme/index.ts` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.05543071161048689 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `(tabs)/index.tsx` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.08140610545790934 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `dependencies` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.044444444444444446 - nodes in this community are weakly interconnected."
+    }
+  ]
+}

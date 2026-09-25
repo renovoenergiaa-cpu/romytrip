@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ImageBackground, TouchableOpacity, SafeAreaView
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Heart, MessageCircle, Share2, MapPin, Navigation, Plane, UserPlus, BadgeCheck, Plus, X, Send, Camera, Film, Image as ImageIcon, Music, Search, Play, Pause, MessageSquare } from 'lucide-react-native';
-import { Audio } from 'expo-av';
+import { createAudioPlayer, AudioModule } from 'expo-audio';
 import { useState, useEffect } from 'react';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
@@ -148,14 +148,17 @@ export default function RomyFeedScreen() {
   const [musicSearchQuery, setMusicSearchQuery] = useState('');
   const [isSearchingMusic, setIsSearchingMusic] = useState(false);
   const [searchResults, setSearchResults] = useState<ITunesSong[]>([]);
-  const [previewSound, setPreviewSound] = useState<Audio.Sound | null>(null);
+  const [previewPlayer, setPreviewPlayer] = useState<any>(null);
   const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
 
   // Clean up sound when modal closes
   useEffect(() => {
-    if (!musicModalVisible && previewSound) {
-      previewSound.unloadAsync();
-      setPreviewSound(null);
+    if (!musicModalVisible && previewPlayer) {
+      try {
+        previewPlayer.pause();
+        previewPlayer.release();
+      } catch (e) {}
+      setPreviewPlayer(null);
       setPlayingTrackId(null);
     }
   }, [musicModalVisible]);
@@ -458,10 +461,12 @@ export default function RomyFeedScreen() {
   };
 
   const handlePreviewSong = async (item: ITunesSong) => {
-    if (previewSound) {
-      await previewSound.stopAsync();
-      await previewSound.unloadAsync();
-      setPreviewSound(null);
+    if (previewPlayer) {
+      try {
+        previewPlayer.pause();
+        previewPlayer.release();
+      } catch (e) {}
+      setPreviewPlayer(null);
     }
     
     if (playingTrackId === item.trackId.toString()) {
@@ -479,12 +484,10 @@ export default function RomyFeedScreen() {
     });
 
     try {
-      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: item.previewUrl },
-        { shouldPlay: true }
-      );
-      setPreviewSound(sound);
+      await AudioModule.setAudioModeAsync({ playsInSilentMode: true });
+      const player = createAudioPlayer({ uri: item.previewUrl });
+      player.play();
+      setPreviewPlayer(player);
     } catch (e) {
       console.log('Error previewing sound', e);
     }
@@ -643,7 +646,7 @@ export default function RomyFeedScreen() {
                 setActiveTab('proximo');
               }}
             >
-              <Text style={[styles.tabText, activeTab === 'proximo' && styles.tabTextActive]}>Próxima viagem</Text>
+              <Text style={[styles.tabText, activeTab === 'proximo' && styles.tabTextActive]}>Próxima</Text>
               {activeTab === 'proximo' && <View style={styles.tabUnderline} />}
             </TouchableOpacity>
           </ScrollView>
@@ -1192,7 +1195,7 @@ const styles = StyleSheet.create({
   },
   tabText: {
     ...typography.body,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '500',
     color: 'rgba(255,255,255,0.55)',
     textShadowColor: 'rgba(0,0,0,0.5)',
@@ -1529,7 +1532,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   fixedPinContainer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
   },

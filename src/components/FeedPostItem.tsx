@@ -11,8 +11,9 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { Video, ResizeMode, Audio } from 'expo-av';
-import { useIsFocused } from '@react-navigation/native';
+import { createAudioPlayer, AudioModule } from 'expo-audio';
+import { VideoView, useVideoPlayer } from 'expo-video';
+import { usePathname } from 'expo-router';
 import {
   Heart,
   MessageCircle,
@@ -43,6 +44,48 @@ import { colors, spacing, typography } from '../theme';
 const { width, height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 60;
 export const FEED_SNAP_HEIGHT = height - TAB_BAR_HEIGHT;
+
+const FeedVideoItem = ({
+  uri,
+  isVisible,
+  isMuted,
+  style,
+  contentFit = 'contain',
+}: {
+  uri: string;
+  isVisible: boolean;
+  isMuted: boolean;
+  style?: any;
+  contentFit?: 'contain' | 'cover';
+}) => {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = true;
+    p.muted = isMuted;
+    if (isVisible) p.play();
+  });
+
+  useEffect(() => {
+    if (player) {
+      if (isVisible) player.play();
+      else player.pause();
+    }
+  }, [isVisible, player]);
+
+  useEffect(() => {
+    if (player) {
+      player.muted = isMuted;
+    }
+  }, [isMuted, player]);
+
+  return (
+    <VideoView
+      player={player}
+      style={style || { width: width, height: FEED_SNAP_HEIGHT }}
+      contentFit={contentFit}
+      nativeControls={false}
+    />
+  );
+};
 
 export const getShortDestination = (destinationStr?: string) => {
   if (!destinationStr) return '';
@@ -121,9 +164,9 @@ export default function FeedPostItem({
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
   const [saveCount, setSaveCount] = useState(item.saves_count || 12);
-  const soundRef = useRef<Audio.Sound | null>(null);
-  const videoRef = useRef<Video>(null);
-  const isFocused = useIsFocused();
+  const playerRef = useRef<any>(null);
+  const pathname = usePathname();
+  const isFocused = pathname === '/' || pathname === '/(tabs)' || pathname === '/(tabs)/';
 
   const actuallyVisible = isVisible && isFocused;
 
@@ -150,10 +193,9 @@ export default function FeedPostItem({
   useEffect(() => {
     (async () => {
       try {
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          allowsRecordingIOS: false,
-          staysActiveInBackground: false,
+        await AudioModule.setAudioModeAsync({
+          playsInSilentMode: true,
+          allowsRecording: false,
         });
       } catch (e) {
         // silent catch
@@ -165,61 +207,46 @@ export default function FeedPostItem({
   useEffect(() => {
     if (!item.audio_url) return;
 
-    let cancelled = false;
-
-    async function loadAndPlay() {
+    if (actuallyVisible) {
       try {
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: item.audio_url! },
-          { shouldPlay: true, isLooping: true, isMuted }
-        );
-        if (cancelled) {
-          newSound.unloadAsync();
-          return;
+        if (!playerRef.current) {
+          const player = createAudioPlayer({ uri: item.audio_url });
+          player.loop = true;
+          player.muted = isMuted;
+          player.play();
+          playerRef.current = player;
+        } else {
+          playerRef.current.muted = isMuted;
+          playerRef.current.play();
         }
-        soundRef.current = newSound;
-        await newSound.playAsync();
       } catch (err) {
         console.log('Audio load error:', err);
       }
-    }
-
-    async function unloadSound() {
-      if (soundRef.current) {
+    } else {
+      if (playerRef.current) {
         try {
-          await soundRef.current.stopAsync();
-          await soundRef.current.unloadAsync();
+          playerRef.current.pause();
         } catch (_) {}
-        soundRef.current = null;
       }
     }
 
-    if (actuallyVisible) {
-      loadAndPlay();
-    } else {
-      unloadSound();
-    }
-
     return () => {
-      cancelled = true;
-      unloadSound();
+      if (playerRef.current) {
+        try {
+          playerRef.current.pause();
+          playerRef.current.release();
+        } catch (_) {}
+        playerRef.current = null;
+      }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actuallyVisible, item.audio_url]);
 
   // Audio: apply mute/unmute without reloading the sound
   useEffect(() => {
-    if (!soundRef.current) return;
-    soundRef.current.setIsMutedAsync(isMuted).catch(() => {});
+    if (playerRef.current) {
+      playerRef.current.muted = isMuted;
+    }
   }, [isMuted]);
-
-  useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-    };
-  }, []);
 
   // Dynamic image size calculation
   useEffect(() => {
@@ -323,14 +350,12 @@ export default function FeedPostItem({
               onPress={toggleMute}
               style={StyleSheet.absoluteFill}
             >
-              <Video
-                ref={videoRef}
-                source={{ uri: item.media_url }}
-                style={StyleSheet.absoluteFill}
-                resizeMode={ResizeMode.COVER}
-                isLooping
+              <FeedVideoItem
+                uri={item.media_url}
+                isVisible={actuallyVisible}
                 isMuted={isMuted}
-                shouldPlay={actuallyVisible}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
               />
               {showMuteIcon && (
                 <View style={styles.videoCenterControlsContainer} pointerEvents="none">
@@ -377,14 +402,10 @@ export default function FeedPostItem({
             style={styles.fullWidthMediaWrapper}
           >
             {isVideo ? (
-              <Video
-                ref={videoRef}
-                source={{ uri: item.media_url }}
-                style={{ width: width, height: FEED_SNAP_HEIGHT }}
-                resizeMode={ResizeMode.CONTAIN}
-                isLooping
+              <FeedVideoItem
+                uri={item.media_url}
+                isVisible={actuallyVisible}
                 isMuted={isMuted}
-                shouldPlay={actuallyVisible}
               />
             ) : isMultiplePhotos ? (
               <FlatList
@@ -626,7 +647,7 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
   ambientOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
   mediaContainer: {
@@ -729,7 +750,7 @@ const styles = StyleSheet.create({
     height: 250,
   },
   overlayContainer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',

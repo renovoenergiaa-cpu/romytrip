@@ -9,6 +9,8 @@ import {
   Image,
   Platform,
   StatusBar,
+  Alert,
+  DeviceEventEmitter,
 } from 'react-native';
 import {
   Settings,
@@ -66,20 +68,39 @@ export default function ProfileScreen() {
     },
   });
 
+  const { data: userPosts, isLoading: isLoadingPosts } = useQuery({
+    queryKey: ['myPosts', profile?.id],
+    enabled: !!profile?.id,
+    queryFn: async () => {
+      if (!profile?.id) return [];
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('user_id', profile.id)
+        .order('created_at', { ascending: false });
+      if (error) {
+        console.warn('Error fetching user posts:', error);
+        return [];
+      }
+      return data || [];
+    },
+  });
+
   const defaultAvatar =
     'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80';
   const avatarUrl = profile?.photos?.[0] || defaultAvatar;
 
   const p = (profile as any) || {};
-  const name = String(p.name || 'Thadeu');
-  const city = String(p.city ? `${p.city}, Brasil` : 'Cabo Frio, Rio de Janeiro, Brasil');
-  const bio = String(p.bio || 'Boraaa');
+  const name = String(p.name || 'Viajante Romy');
+  const city = String(p.city ? (p.city.toLowerCase().includes('brasil') ? p.city : `${p.city}, Brasil`) : 'Definir localização');
+  const bio = String(p.bio || 'Adicione uma bio para compartilhar seus destinos e experiências...');
   const objective = String(
     p.connection_intentions?.[0] ||
     p.connection_objective ||
     'Conhecer pessoas para explorar a cidade, tomar café, fazer trilhas e trocar experiências.'
   );
-  const destination = String(p.destination || 'Em casa');
+  const destination = String(p.destination || 'Definir próximo destino');
+  const tripCount = userPosts?.length ? String(userPosts.length) : (p.destination && p.destination !== 'Em casa' ? '1' : '0');
 
   const rawInterests =
     Array.isArray(p.travel_styles) && p.travel_styles.length > 0
@@ -271,7 +292,7 @@ export default function ProfileScreen() {
           {/* Stat 1: Viagens */}
           <View style={styles.statCol}>
             <Briefcase size={18} color="#8B5CF6" strokeWidth={2.2} />
-            <Text style={styles.statValue}>1</Text>
+            <Text style={styles.statValue}>{tripCount}</Text>
             <Text style={styles.statLabel}>Viagens</Text>
           </View>
 
@@ -340,7 +361,7 @@ export default function ProfileScreen() {
             style={styles.infoCard}
             onPress={() => {
               Haptics.selectionAsync();
-              router.push('/create');
+              router.push('/edit-profile');
             }}
           >
             <View style={[styles.infoIconCircle, { backgroundColor: isDark ? 'rgba(13, 148, 136, 0.2)' : '#E6F7F5' }]}>
@@ -436,7 +457,10 @@ export default function ProfileScreen() {
               style={styles.novoMomentoBtn}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push('/create');
+                router.navigate('/(tabs)');
+                setTimeout(() => {
+                  DeviceEventEmitter.emit('openCreatePost');
+                }, 120);
               }}
             >
               <Plus size={13} color="#6338FA" strokeWidth={2.6} />
@@ -444,33 +468,82 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Moment Card */}
-          <View style={styles.momentoCard}>
-            <Image
-              source={{
-                uri: 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
-              }}
-              style={styles.momentoThumbnail}
-            />
-            <View style={styles.momentoMetaCol}>
-              <Text style={styles.momentoTitle}>Primeira Viagem</Text>
-              <View style={styles.momentoLocationRow}>
-                <MapPin size={12} color={isDark ? '#A1A1AA' : '#6B7280'} strokeWidth={2} />
-                <Text style={styles.momentoLocationText}>Paris, França</Text>
+          {/* Moment Cards or Empty State */}
+          {userPosts && userPosts.length > 0 ? (
+            userPosts.map((post: any) => (
+              <View key={post.id} style={styles.momentoCard}>
+                <Image
+                  source={{
+                    uri: post.image_url || 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
+                  }}
+                  style={styles.momentoThumbnail}
+                />
+                <View style={styles.momentoMetaCol}>
+                  <Text style={styles.momentoTitle} numberOfLines={1}>
+                    {post.caption || 'Momento de viagem'}
+                  </Text>
+                  <View style={styles.momentoLocationRow}>
+                    <MapPin size={12} color={isDark ? '#A1A1AA' : '#6B7280'} strokeWidth={2} />
+                    <Text style={styles.momentoLocationText} numberOfLines={1}>
+                      {post.destination || 'Local registrado'}
+                    </Text>
+                  </View>
+                  <View style={styles.momentoPhotoCountRow}>
+                    <ImageIcon size={12} color={isDark ? '#A1A1AA' : '#6B7280'} strokeWidth={2} />
+                    <Text style={styles.momentoPhotoCountText}>
+                      {new Date(post.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                    </Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  style={styles.momentoMoreBtn}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    Alert.alert(
+                      'Momento de Viagem',
+                      post.caption || post.destination || 'Publicação',
+                      [
+                        {
+                          text: 'Ver no Feed',
+                          onPress: () => router.navigate('/(tabs)'),
+                        },
+                        {
+                          text: 'Editar Perfil',
+                          onPress: () => router.push('/edit-profile'),
+                        },
+                        { text: 'Fechar', style: 'cancel' },
+                      ]
+                    );
+                  }}
+                >
+                  <MoreHorizontal size={18} color={isDark ? '#A1A1AA' : '#6B7280'} />
+                </TouchableOpacity>
               </View>
-              <View style={styles.momentoPhotoCountRow}>
-                <ImageIcon size={12} color={isDark ? '#A1A1AA' : '#6B7280'} strokeWidth={2} />
-                <Text style={styles.momentoPhotoCountText}>1 foto</Text>
-              </View>
+            ))
+          ) : (
+            <View style={styles.emptyMomentsCard}>
+              <ImageIcon size={32} color={isDark ? '#71717A' : '#9CA3AF'} style={{ marginBottom: 6 }} />
+              <Text style={styles.emptyMomentsTitle}>Nenhum momento compartilhado</Text>
+              <Text style={styles.emptyMomentsSubtitle}>
+                Publique fotos e vídeos das suas viagens para que outros viajantes conheçam suas experiências!
+              </Text>
+              <TouchableOpacity
+                style={styles.emptyMomentsCta}
+                activeOpacity={0.85}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.navigate('/(tabs)');
+                  setTimeout(() => {
+                    DeviceEventEmitter.emit('openCreatePost');
+                  }, 120);
+                }}
+              >
+                <Plus size={14} color="#FFF" strokeWidth={2.4} />
+                <Text style={styles.emptyMomentsCtaText}>Criar Publicação</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              style={styles.momentoMoreBtn}
-              onPress={() => Haptics.selectionAsync()}
-            >
-              <MoreHorizontal size={18} color={isDark ? '#A1A1AA' : '#6B7280'} />
-            </TouchableOpacity>
-          </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -903,6 +976,44 @@ const getStyles = (colors: any, isDark: boolean) =>
       color: 'rgba(255,255,255,0.85)',
       fontSize: 11.5,
       lineHeight: 16,
+    },
+    emptyMomentsCard: {
+      backgroundColor: isDark ? '#141416' : '#FFFFFF',
+      borderRadius: 18,
+      padding: 24,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: isDark ? '#222226' : '#ECEEF1',
+      borderStyle: 'dashed',
+    },
+    emptyMomentsTitle: {
+      fontSize: 14.5,
+      fontWeight: '600',
+      color: isDark ? '#FFFFFF' : '#111827',
+      marginTop: 4,
+    },
+    emptyMomentsSubtitle: {
+      fontSize: 12,
+      color: isDark ? '#A1A1AA' : '#6B7280',
+      textAlign: 'center',
+      marginTop: 4,
+      marginBottom: 16,
+      lineHeight: 18,
+      maxWidth: 280,
+    },
+    emptyMomentsCta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: '#6338FA',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 20,
+    },
+    emptyMomentsCtaText: {
+      color: '#FFFFFF',
+      fontSize: 13,
+      fontWeight: '600',
     },
   });
 

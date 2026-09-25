@@ -1,6 +1,6 @@
 import { View, StyleSheet, ScrollView, TouchableOpacity, Text, Alert, ActivityIndicator, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Square, CheckSquare, Sparkles, ChevronLeft, ShieldCheck, Heart, Users, MapPin, Check } from 'lucide-react-native';
+import { Square, CheckSquare, Sparkles, ChevronLeft, ShieldCheck, Heart, Users, MapPin, Check, AlertCircle } from 'lucide-react-native';
 import { useState, useMemo } from 'react';
 import { ProgressBar } from '../../../src/components/ProgressBar';
 import { useOnboardingStore } from '../../../src/store/onboardingStore';
@@ -31,18 +31,26 @@ export default function Step6ConnectionsScreen() {
   const { refreshProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [pledgeAccepted, setPledgeAccepted] = useState(true); // Padrão selecionado com destaque
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleFinish = async () => {
+    setErrorMessage(null);
     if (!state.connectionIntentions || state.connectionIntentions.length === 0) {
-      Alert.alert('Intenções de Viagem', 'Selecione pelo menos uma intenção de conexão para orientar suas sintonias.');
+      const msg = 'Selecione pelo menos uma intenção de conexão para orientar suas sintonias.';
+      setErrorMessage(msg);
+      if (Platform.OS !== 'web') Alert.alert('Intenções de Viagem', msg);
       return;
     }
     if (!state.genderPreference) {
-      Alert.alert('Preferência de Radar', 'Escolha sua preferência de visualização de gênero no feed.');
+      const msg = 'Escolha sua preferência de visualização de gênero no feed.';
+      setErrorMessage(msg);
+      if (Platform.OS !== 'web') Alert.alert('Preferência de Radar', msg);
       return;
     }
     if (!pledgeAccepted) {
-      Alert.alert('Pacto de Segurança', 'Por favor, aceite o Pacto Romy de Respeito e Segurança para fazer parte da comunidade.');
+      const msg = 'Por favor, aceite o Pacto Romy de Respeito e Segurança para fazer parte da comunidade.';
+      setErrorMessage(msg);
+      if (Platform.OS !== 'web') Alert.alert('Pacto de Segurança', msg);
       return;
     }
 
@@ -53,11 +61,8 @@ export default function Step6ConnectionsScreen() {
     
     if (!user) {
       const msg = 'Usuário não autenticado. Por favor, faça login novamente.';
-      if (Platform.OS === 'web') {
-        if (typeof window !== 'undefined') window.alert(msg);
-      } else {
-        Alert.alert('Erro', msg);
-      }
+      setErrorMessage(msg);
+      if (Platform.OS !== 'web') Alert.alert('Erro', msg);
       setLoading(false);
       return;
     }
@@ -83,11 +88,8 @@ export default function Step6ConnectionsScreen() {
       }
       if (age < 18) {
         const msg = 'O Romy é exclusivo para maiores de 18 anos. Cadastro proibido para menores de idade.';
-        if (Platform.OS === 'web' && typeof window !== 'undefined') {
-          window.alert(`Cadastro Proibido: ${msg}`);
-        } else {
-          Alert.alert('Cadastro Proibido', msg);
-        }
+        setErrorMessage(msg);
+        if (Platform.OS !== 'web') Alert.alert('Cadastro Proibido', msg);
         setLoading(false);
         return;
       }
@@ -157,10 +159,8 @@ export default function Step6ConnectionsScreen() {
       }
     }
 
-    // Dados consolidados para upsert
+    // Dados consolidados para atualização de perfil
     const updateData = {
-      id: user.id,
-      email: user.email,
       name: state.name,
       dob: parsedDob,
       city: state.city,
@@ -187,19 +187,26 @@ export default function Step6ConnectionsScreen() {
       gender_preference: state.genderPreference,
     };
 
-    const { error } = await supabase
+    // Atualização direta por ID (usuário pré-criado no trigger handle_new_user)
+    let { error } = await supabase
       .from('users')
-      .upsert(updateData);
+      .update(updateData)
+      .eq('id', user.id);
+
+    // Fallback gracioso com upsert caso a linha ainda não exista
+    if (error) {
+      console.warn('Update direto retornou aviso, tentando upsert de fallback:', error);
+      const fallbackRes = await supabase.from('users').upsert({ id: user.id, email: user.email, ...updateData });
+      error = fallbackRes.error;
+    }
 
     if (error) {
       const msg = 'Falha ao salvar seu perfil: ' + error.message;
-      if (Platform.OS === 'web') {
-        if (typeof window !== 'undefined') window.alert(msg);
-      } else {
-        Alert.alert('Erro', msg);
-      }
+      setErrorMessage(msg);
+      if (Platform.OS !== 'web') Alert.alert('Erro', msg);
       setLoading(false);
     } else {
+      setErrorMessage(null);
       state.reset(); // Limpar store
       await refreshProfile(); // Atualiza AuthContext para isProfileComplete = true
       router.replace('/(tabs)');
@@ -298,6 +305,13 @@ export default function Step6ConnectionsScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {errorMessage ? (
+        <View style={styles.errorBanner} accessibilityRole="alert">
+          <AlertCircle size={18} color="#DC2626" style={{ marginRight: 8 }} />
+          <Text style={styles.errorBannerText}>{errorMessage}</Text>
+        </View>
+      ) : null}
 
       <TouchableOpacity 
         style={styles.button} 
@@ -512,5 +526,22 @@ const styles = StyleSheet.create({
     ...typography.body,
     fontWeight: '700',
     fontSize: 15,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#F87171',
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  errorBannerText: {
+    flex: 1,
+    ...typography.caption,
+    color: '#B91C1C',
+    fontWeight: '600',
+    fontSize: 13,
   },
 });

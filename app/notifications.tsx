@@ -153,7 +153,7 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     borderRadius: 24,
   },
   gradientOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 24,
     justifyContent: 'flex-end',
   },

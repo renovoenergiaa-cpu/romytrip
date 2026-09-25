@@ -48,3 +48,14 @@ app-example
 zap-report.*
 zap.yaml
 
+# Graphify artifacts and cache
+graphify-out/cache/
+graphify-out/*.html
+graphify-out/*.sig
+graphify-out/.graphify_analysis.json
+
+# Temporary tools & QR codes
+supabase/.temp/
+qr_*.png
+
+

@@ -236,7 +236,7 @@ export function CustomDatePicker({
           onPress={handleOpenCalendar}
           accessibilityLabel="Abrir calendário visual"
         >
-          <Calendar size={20} color={themeColors.primary} />
+          <Calendar size={18} color={themeColors.primary} />
         </TouchableOpacity>
       </View>
 
@@ -399,20 +399,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 12,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 10,
     height: 52,
     position: 'relative',
   },
   iconButton: {
-    padding: 6,
+    padding: 4,
     justifyContent: 'center',
     alignItems: 'center',
   },
   input: {
     flex: 1,
+    minWidth: 0,
     height: '100%',
     ...typography.body,
-    fontSize: 15,
+    fontSize: 14,
   },
   errorText: {
     ...typography.caption,

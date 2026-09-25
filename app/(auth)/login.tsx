@@ -21,6 +21,8 @@ import { CustomInput } from '../../src/components/CustomInput';
 import { colors, spacing, typography } from '../../src/theme';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import { makeRedirectUri } from 'expo-auth-session';
+import { AlertCircle } from 'lucide-react-native';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -35,6 +37,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [isSigningUp, setIsSigningUp] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Redireciona declarativamente se autenticado com perfil completo
   if (session && !isSigningUp && isProfileComplete === true) {
@@ -42,11 +45,8 @@ export default function LoginScreen() {
   }
 
   const showAlert = (title: string, message: string) => {
-    if (Platform.OS === 'web') {
-      if (typeof window !== 'undefined') {
-        window.alert(`${title}: ${message}`);
-      }
-    } else {
+    setErrorMessage(message);
+    if (Platform.OS !== 'web') {
       Alert.alert(title, message);
     }
   };
@@ -183,7 +183,13 @@ export default function LoginScreen() {
       }
 
       // Fluxo Nativo (iOS / Android)
-      const redirectUrl = Linking.createURL('/');
+      // makeRedirectUri gera a URL correta tanto no Expo Go (exp://ip:port/--/)
+      // quanto em builds standalone (romy://)
+      const redirectUrl = makeRedirectUri({
+        scheme: 'romy',
+        path: '/',
+      });
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
@@ -327,7 +333,10 @@ export default function LoginScreen() {
             <View style={styles.tabContainer}>
               <TouchableOpacity
                 style={[styles.tabButton, mode === 'login' && styles.tabButtonActive]}
-                onPress={() => setMode('login')}
+                onPress={() => {
+                  setMode('login');
+                  setErrorMessage(null);
+                }}
                 activeOpacity={0.8}
               >
                 <Text style={[styles.tabText, mode === 'login' && styles.tabTextActive]}>
@@ -336,7 +345,10 @@ export default function LoginScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.tabButton, mode === 'signup' && styles.tabButtonActive]}
-                onPress={() => setMode('signup')}
+                onPress={() => {
+                  setMode('signup');
+                  setErrorMessage(null);
+                }}
                 activeOpacity={0.8}
               >
                 <Text style={[styles.tabText, mode === 'signup' && styles.tabTextActive]}>
@@ -352,15 +364,28 @@ export default function LoginScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(t) => {
+                  setEmail(t);
+                  if (errorMessage) setErrorMessage(null);
+                }}
               />
 
               <CustomInput
                 placeholder={mode === 'signup' ? 'Crie uma senha (mínimo 6 dígitos)' : 'Senha'}
                 secureTextEntry
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(t) => {
+                  setPassword(t);
+                  if (errorMessage) setErrorMessage(null);
+                }}
               />
+
+              {errorMessage ? (
+                <View style={styles.errorBanner} accessibilityRole="alert">
+                  <AlertCircle size={16} color="#DC2626" style={{ marginRight: 8 }} />
+                  <Text style={styles.errorBannerText}>{errorMessage}</Text>
+                </View>
+              ) : null}
 
               {mode === 'login' ? (
                 <TouchableOpacity
@@ -785,5 +810,23 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     fontSize: 12,
     fontWeight: '600',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#F87171',
+    borderRadius: 12,
+    padding: spacing.md,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  errorBannerText: {
+    flex: 1,
+    ...typography.caption,
+    color: '#B91C1C',
+    fontWeight: '600',
+    fontSize: 13,
   },
 });

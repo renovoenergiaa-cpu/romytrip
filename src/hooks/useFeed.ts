@@ -34,14 +34,22 @@ export function useFeed(destination?: string) {
         query = query.ilike('destination', `%${destination}%`);
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
-      
-      return (data || []).filter((post: any) => 
-        post.users && 
-        post.users.name !== 'Conta Excluída' && 
-        post.users.name !== 'Usuário Romy'
-      );
+      try {
+        const { data, error } = await query;
+        if (error) {
+          console.warn('Feed fetch notice:', error.message);
+          return [];
+        }
+        
+        return (data || []).filter((post: any) => 
+          post.users && 
+          post.users.name !== 'Conta Excluída' && 
+          post.users.name !== 'Usuário Romy'
+        );
+      } catch (err) {
+        console.warn('Feed query error handled:', err);
+        return [];
+      }
     },
   });
 }

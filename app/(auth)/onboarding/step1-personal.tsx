@@ -1,6 +1,6 @@
 import { View, StyleSheet, ScrollView, TouchableOpacity, Text, TextInput, Image, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Upload, ShieldCheck, Sparkles, Plus, Trash2, ChevronLeft } from 'lucide-react-native';
+import { Upload, ShieldCheck, Sparkles, Plus, Trash2, ChevronLeft, AlertCircle } from 'lucide-react-native';
 import { useState, useMemo } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { BirthDatePicker } from '../../../src/components/BirthDatePicker';
@@ -15,6 +15,7 @@ import { supabase } from '../../../src/lib/supabase';
 export default function Step1PersonalScreen() {
   const router = useRouter();
   const { name, dob, city, sex, photos, bio, updateField, reset: resetOnboarding } = useOnboardingStore();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleCancelOnboarding = async () => {
     try {
@@ -48,36 +49,27 @@ export default function Step1PersonalScreen() {
   const minBirthDate = useMemo(() => new Date(1900, 0, 1, 12, 0, 0), []);
   
   const handleNext = () => {
+    setErrorMessage(null);
     if (!name?.trim() || !dob || !city?.trim() || !sex) {
       const msg = 'Preencha seu nome, data de nascimento, cidade base e gênero para continuar.';
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        window.alert(`Aviso: ${msg}`);
-      } else {
-        Alert.alert('Aviso', msg);
-      }
+      setErrorMessage(msg);
+      if (Platform.OS !== 'web') Alert.alert('Aviso', msg);
       return;
     }
 
     // 🔒 SEGURANÇA & CONFORMIDADE: Bloqueio estrito de cadastro para menores de 18 anos
     const age = calculateAge(dob);
     if (age < 18) {
-      const title = 'Cadastro Proibido para Menores';
       const msg = 'O Romy é uma comunidade exclusiva para maiores de 18 anos. Menores de idade não podem criar uma conta.';
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        window.alert(`${title}: ${msg}`);
-      } else {
-        Alert.alert(title, msg);
-      }
+      setErrorMessage(msg);
+      if (Platform.OS !== 'web') Alert.alert('Cadastro Proibido para Menores', msg);
       return;
     }
 
     if (!photos || photos.length === 0 || !photos[0]) {
       const msg = 'Adicione pelo menos uma foto sua para que seus futuros companheiros de viagem te reconheçam.';
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        window.alert(`Foto Obrigatória: ${msg}`);
-      } else {
-        Alert.alert('Foto Obrigatória', msg);
-      }
+      setErrorMessage(msg);
+      if (Platform.OS !== 'web') Alert.alert('Foto Obrigatória', msg);
       return;
     }
     router.push('/(auth)/onboarding/step2-trip');
@@ -229,6 +221,13 @@ export default function Step1PersonalScreen() {
           maxLength={300}
         />
       </View>
+
+      {errorMessage ? (
+        <View style={styles.errorBanner} accessibilityRole="alert">
+          <AlertCircle size={18} color="#DC2626" style={{ marginRight: 8 }} />
+          <Text style={styles.errorBannerText}>{errorMessage}</Text>
+        </View>
+      ) : null}
 
       <TouchableOpacity style={styles.button} onPress={handleNext} activeOpacity={0.85}>
         <Text style={styles.buttonText}>Continuar para Próxima Viagem →</Text>
@@ -476,5 +475,22 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '700',
     textDecorationLine: 'underline',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#F87171',
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  errorBannerText: {
+    flex: 1,
+    ...typography.caption,
+    color: '#B91C1C',
+    fontWeight: '600',
+    fontSize: 13,
   },
 });

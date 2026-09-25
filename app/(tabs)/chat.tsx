@@ -12,6 +12,7 @@ export default function ChatScreen() {
   const router = useRouter();
   const [isModalVisible, setModalVisible] = useState(false);
   const [filter, setFilter] = useState<'Todas' | 'Diretas' | 'Grupos' | 'Arquivadas'>('Todas');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedChat, setSelectedChat] = useState<any>(null);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
   const { colors, isDark } = useTheme();
@@ -102,6 +103,25 @@ export default function ChatScreen() {
 
   const defaultAvatar = 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80';
 
+  const filteredConversations = (conversations || []).filter((chat: any) => {
+    if (filter === 'Arquivadas') {
+      if (!chat.is_archived) return false;
+    } else {
+      if (chat.is_archived) return false;
+      if (filter === 'Diretas' && chat.is_group) return false;
+      if (filter === 'Grupos' && !chat.is_group) return false;
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const chatName = (chat.is_group ? chat.name : chat.other_participant?.name) || '';
+      const lastMsg = chat.last_message?.text || '';
+      return chatName.toLowerCase().includes(q) || lastMsg.toLowerCase().includes(q);
+    }
+
+    return true;
+  });
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -117,7 +137,15 @@ export default function ChatScreen() {
             placeholder="Buscar conversas..."
             placeholderTextColor={colors.textMuted}
             style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
           />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <X size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Filters */}
@@ -141,16 +169,8 @@ export default function ChatScreen() {
           <View style={{ paddingTop: 8 }}>
             {[...Array(6)].map((_, i) => <SkeletonChatRow key={i} />)}
           </View>
-        ) : conversations && conversations.length > 0 ? (
-          conversations
-            .filter((chat: any) => {
-              if (filter === 'Arquivadas') return chat.is_archived;
-              if (chat.is_archived) return false; // Hide archived from other views
-              if (filter === 'Diretas') return !chat.is_group;
-              if (filter === 'Grupos') return chat.is_group;
-              return true; // Todas
-            })
-            .map((chat: any) => {
+        ) : filteredConversations && filteredConversations.length > 0 ? (
+          filteredConversations.map((chat: any) => {
             const isGroup = chat.is_group;
             const isDeletedAccount = !isGroup && (
               chat.other_participant?.name === 'Conta Excluída' || 
@@ -221,6 +241,14 @@ export default function ChatScreen() {
               </TouchableOpacity>
             );
           })
+        ) : searchQuery.trim() ? (
+          <EmptyState
+            icon={Search}
+            title="Nenhum resultado"
+            subtitle={`Nenhuma conversa encontrada para "${searchQuery}".`}
+            ctaLabel="Limpar busca"
+            onCta={() => setSearchQuery('')}
+          />
         ) : (
           <EmptyState
             icon={MessageCircle}
