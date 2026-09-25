@@ -27,6 +27,7 @@ import CommunitiesScreen from './communities';
 import HelpBoardScreen from '../../app/help-board';
 import ProximaViagemScreen from '../../src/components/ProximaViagemScreen';
 import FeedPostItem, { FEED_SNAP_HEIGHT, PostItemData } from '../../src/components/FeedPostItem';
+import { UploadProgressBanner, UploadingPostData } from '../../src/components/UploadProgressBanner';
 
 const { width, height } = Dimensions.get('window');
 const SNAP_HEIGHT = FEED_SNAP_HEIGHT;
@@ -86,11 +87,21 @@ export default function RomyFeedScreen() {
 
   // Removed manual currentUserId fetch, handled by useCurrentUserId hook
 
+  if (typeof window !== 'undefined') {
+    (window as any).DeviceEventEmitter = DeviceEventEmitter;
+  }
+
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener('openCreatePost', () => {
       handleAddPostClick();
     });
-    return () => sub.remove();
+    const testSub = DeviceEventEmitter.addListener('testUploadBanner', (data: any) => {
+      setUploadingPost(data);
+    });
+    return () => {
+      sub.remove();
+      testSub.remove();
+    };
   }, []);
 
   // Update feed filter when tab or location changes
@@ -136,8 +147,11 @@ export default function RomyFeedScreen() {
   const [draftEventLocation, setDraftEventLocation] = useState<{ latitude: number, longitude: number } | null>(null);
   const [draftLocationName, setDraftLocationName] = useState<string>('Buscando local...');
   const mapRef = useRef<any>(null);
+  const feedFlatListRef = useRef<FlatList<any>>(null);
 
-  // Post Creation States
+  // Post Creation & Upload States
+  const [uploadingPost, setUploadingPost] = useState<UploadingPostData | null>(null);
+  const uploadProgressInterval = useRef<any>(null);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [mediaOptionModalVisible, setMediaOptionModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -414,25 +428,118 @@ export default function RomyFeedScreen() {
       return;
     }
 
+    const mediaUriToUpload = selectedImage;
+    const destinationToUpload = newPostDestination;
+    const descriptionToUpload = newPostDescription;
+    const songToUpload = selectedSong;
+
+    // 1. Fechar o modal imediatamente e limpar o formulário (experiência fluida tipo Instagram)
+    setCreateModalVisible(false);
+    setSelectedImage(null);
+    setNewPostDestination('');
+    setNewPostDescription('');
+    setSelectedSong(null);
+    setMusicSearchQuery('');
+    setSearchResults([]);
+
+    // 2. Ir para a aba do Feed e rolar para o topo
+    setActiveTab('aqui');
+    feedFlatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    setActivePostIndex(0);
+
+    // 3. Iniciar o banner de progresso de upload no topo
+    setUploadingPost({
+      id: Date.now().toString(),
+      mediaUri: mediaUriToUpload,
+      destination: destinationToUpload,
+      description: descriptionToUpload,
+      status: 'uploading',
+      progress: 15,
+    });
+
+    if (uploadProgressInterval.current) clearInterval(uploadProgressInterval.current);
+    uploadProgressInterval.current = setInterval(() => {
+      setUploadingPost((prev) => {
+        if (!prev || prev.status !== 'uploading') return prev;
+        const inc = Math.floor(Math.random() * 12) + 6;
+        const next = Math.min(prev.progress + inc, 88);
+        return { ...prev, progress: next };
+      });
+    }, 350);
+
     createPost({
-      mediaUri: selectedImage,
-      destination: newPostDestination,
-      description: newPostDescription,
-      audio_title: selectedSong ? selectedSong.title : undefined,
-      audio_url: selectedSong ? selectedSong.url : undefined,
+      mediaUri: mediaUriToUpload,
+      destination: destinationToUpload,
+      description: descriptionToUpload,
+      audio_title: songToUpload ? songToUpload.title : undefined,
+      audio_url: songToUpload ? songToUpload.url : undefined,
     }, {
-      onSuccess: () => {
-        setCreateModalVisible(false);
-        setSelectedImage(null);
-        setNewPostDestination('');
-        setNewPostDescription('');
-        setSelectedSong(null);
-        setMusicSearchQuery('');
-        setSearchResults([]);
-        Alert.alert('Sucesso', 'Post publicado com sucesso!');
+      onSuccess: async () => {
+        if (uploadProgressInterval.current) clearInterval(uploadProgressInterval.current);
+        setUploadingPost((prev) => prev ? { ...prev, progress: 100, status: 'success' } : null);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+        // Atualizar feed imediatamente para o usuário já ver sua publicação no topo
+        await refetchFeed();
+        feedFlatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+        setActivePostIndex(0);
+
+        // Remover banner suavemente após 2.2 segundos
+        setTimeout(() => {
+          setUploadingPost((prev) => (prev?.status === 'success' ? null : prev));
+        }, 2200);
       },
-      onError: (err) => {
-        Alert.alert('Erro', 'Ocorreu um erro ao publicar: ' + err.message);
+      onError: (err: any) => {
+        if (uploadProgressInterval.current) clearInterval(uploadProgressInterval.current);
+        setUploadingPost((prev) => prev ? {
+          ...prev,
+          status: 'error',
+          errorMessage: err?.message || 'Erro ao publicar.',
+        } : null);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    });
+  };
+
+  const handleRetryUpload = () => {
+    if (!uploadingPost) return;
+    const retryPost = { ...uploadingPost };
+    setUploadingPost({ ...retryPost, status: 'uploading', progress: 20 });
+
+    if (uploadProgressInterval.current) clearInterval(uploadProgressInterval.current);
+    uploadProgressInterval.current = setInterval(() => {
+      setUploadingPost((prev) => {
+        if (!prev || prev.status !== 'uploading') return prev;
+        const inc = Math.floor(Math.random() * 12) + 6;
+        const next = Math.min(prev.progress + inc, 88);
+        return { ...prev, progress: next };
+      });
+    }, 350);
+
+    createPost({
+      mediaUri: retryPost.mediaUri,
+      destination: retryPost.destination,
+      description: retryPost.description || '',
+    }, {
+      onSuccess: async () => {
+        if (uploadProgressInterval.current) clearInterval(uploadProgressInterval.current);
+        setUploadingPost((prev) => prev ? { ...prev, progress: 100, status: 'success' } : null);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        await refetchFeed();
+        feedFlatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+        setActivePostIndex(0);
+        setTimeout(() => {
+          setUploadingPost((prev) => (prev?.status === 'success' ? null : prev));
+        }, 2200);
+      },
+      onError: (err: any) => {
+        if (uploadProgressInterval.current) clearInterval(uploadProgressInterval.current);
+        setUploadingPost((prev) => prev ? {
+          ...prev,
+          status: 'error',
+          errorMessage: err?.message || 'Erro ao publicar.',
+        } : null);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
     });
   };
@@ -588,6 +695,13 @@ export default function RomyFeedScreen() {
   return (
     <View style={[styles.container, { backgroundColor: isPhotoOrMap ? '#000' : colors.background }]}>
       
+      {/* Instagram-style Upload Progress Banner */}
+      <UploadProgressBanner
+        post={uploadingPost}
+        onDismiss={() => setUploadingPost(null)}
+        onRetry={handleRetryUpload}
+      />
+
       <SafeAreaView style={styles.safeAreaAbsolute}>
         <View style={[
           styles.topNavWrapper,
@@ -618,7 +732,7 @@ export default function RomyFeedScreen() {
             <TouchableOpacity 
               style={styles.tabWrapper}
               activeOpacity={0.8}
-              onPress={() => {
+              onPress={() => { 
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 setActiveTab('rolando');
               }}
@@ -630,7 +744,7 @@ export default function RomyFeedScreen() {
             <TouchableOpacity 
               style={styles.tabWrapper}
               activeOpacity={0.8}
-              onPress={() => {
+              onPress={() => { 
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 setActiveTab('comunidades');
               }}
@@ -642,7 +756,7 @@ export default function RomyFeedScreen() {
             <TouchableOpacity 
               style={styles.tabWrapper}
               activeOpacity={0.8}
-              onPress={() => {
+              onPress={() => { 
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 setActiveTab('ajudinha');
               }}
@@ -654,7 +768,7 @@ export default function RomyFeedScreen() {
             <TouchableOpacity 
               style={styles.tabWrapper}
               activeOpacity={0.8}
-              onPress={() => {
+              onPress={() => { 
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 setActiveTab('proximo');
               }}
@@ -674,6 +788,7 @@ export default function RomyFeedScreen() {
           </View>
         ) : posts && posts.length > 0 ? (
           <FlatList
+            ref={feedFlatListRef}
             data={posts}
             renderItem={renderPost}
             keyExtractor={item => item.id}
