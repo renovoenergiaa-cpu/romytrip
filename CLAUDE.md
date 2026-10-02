@@ -28,6 +28,7 @@ App móvel (Android/iOS/web) de turismo social com leve feeling de dating, feito
 - **Entender:** `graphify` — para dúvidas de arquitetura, rode `graphify query "<pergunta>"` (ou `path` / `explain`) antes de varrer o código; `graphify-out/GRAPH_REPORT.md` só para visão ampla. Após alterar código, `graphify update .`. Se ausente/desatualizado, siga com grep/leitura.
 - **Planejar/implementar:** `spec-driven-development`, `planning-and-task-breakdown`, `incremental-implementation`, `test-driven-development`, `debugging-and-error-recovery`, `code-review-and-quality`, `security-and-hardening`, `performance-optimization`, `frontend-ui-engineering`, `api-and-interface-design`.
 - **Simplificar:** `ponytail` (modo full), `ponytail-review`, `ponytail-audit`, `ponytail-debt`. Reutilize o que existe antes de criar; nunca corte validação, segurança, acessibilidade ou testes.
+- **Design/frontend:** `impeccable` (pbakaus/impeccable — sem hooks; o launcher `scripts/impeccable` baixa um binário, só rode com autorização), skills do Emil Kowalski (`emil-design-eng`, `animate-expo`, `review-animations`, `break-ui`, `mobile-native`…), `taste` (senlindesign; pede Playwright MCP — o navegador embutido serve no lugar).
 - Use de forma proporcional ao tamanho da tarefa; nada disso é burocracia para mudanças mínimas.
 - Precedência em conflitos: pedido do usuário > comportamento correto > segurança > acessibilidade > regras deste arquivo > skills.
 
