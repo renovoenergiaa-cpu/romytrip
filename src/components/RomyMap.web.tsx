@@ -1,8 +1,9 @@
-import React, { forwardRef, useImperativeHandle, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { MapPin, Calendar, Compass } from 'lucide-react-native';
-import { colors, spacing, typography } from '../theme';
-import { AVAILABLE_EVENT_ICONS } from './CreateEventModal';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useTheme, type ThemeColors } from '../theme';
+import { eventIcon } from '../features/events/eventIcons';
+import { Compass, MapPin } from '../features/onboarding/icons';
+import { WEB_MAP_DOC } from './webMapDoc';
 
 export interface RomyMapProps {
   mapRegion: any;
@@ -10,93 +11,99 @@ export interface RomyMapProps {
   onRegionChangeComplete: (region: any) => void;
   localEvents?: any[];
   onSelectEvent: (event: any) => void;
+  /** Ponto escolhido para o novo evento (o celular usa o pino no centro e ignora). */
+  draftPin?: { latitude: number; longitude: number } | null;
   style?: any;
   children?: React.ReactNode;
 }
 
-const RomyMap = forwardRef<any, RomyMapProps>(({
-  mapRegion,
-  onLongPress,
-  onRegionChangeComplete,
-  localEvents = [],
-  onSelectEvent,
-  style,
-  children
-}, ref) => {
-  const [currentRegion, setCurrentRegion] = useState(mapRegion);
+// Largura de tela em graus -> nível de zoom do mapa
+const zoomFor = (latitudeDelta?: number) => (latitudeDelta ? Math.max(3, Math.min(18, Math.round(Math.log2(360 / latitudeDelta)))) : 14);
+
+// Mapa do web: página própria (webMapDoc) dentro de um iframe, para saber onde a pessoa segurou.
+const RomyMap = forwardRef<any, RomyMapProps>(({ mapRegion, onLongPress, onRegionChangeComplete, localEvents = [], onSelectEvent, draftPin, style, children }, ref) => {
+  const { colors, isDark } = useTheme();
+  const s = useMemo(() => getStyles(colors), [colors]);
+  const frame = useRef<HTMLIFrameElement | null>(null);
+  const ready = useRef(false);
+
+  const post = useCallback((msg: Record<string, unknown>) => {
+    frame.current?.contentWindow?.postMessage({ romy: 1, ...msg }, '*');
+  }, []);
+
+  const pushState = useCallback(() => {
+    post({
+      type: 'state',
+      dark: isDark,
+      me: mapRegion ? { lat: mapRegion.latitude, lon: mapRegion.longitude } : null,
+      draft: draftPin ? { lat: draftPin.latitude, lon: draftPin.longitude } : null,
+      events: localEvents.map((e) => ({ id: String(e.id), lat: e.latitude, lon: e.longitude, label: '' })),
+    });
+  }, [post, isDark, mapRegion, draftPin, localEvents]);
 
   useImperativeHandle(ref, () => ({
-    animateToRegion: (region: any) => {
-      setCurrentRegion(region);
-      onRegionChangeComplete?.(region);
-    }
+    animateToRegion: (r: any) => {
+      post({ type: 'center', lat: r.latitude, lon: r.longitude, z: zoomFor(r.latitudeDelta) });
+      onRegionChangeComplete?.(r);
+    },
   }));
 
-  const lat = currentRegion?.latitude || -23.5505;
-  const lon = currentRegion?.longitude || -46.6333;
-  const bboxDelta = 0.05;
-  const bbox = `${lon - bboxDelta}%2C${lat - bboxDelta}%2C${lon + bboxDelta}%2C${lat + bboxDelta}`;
-  const iframeSrc = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat}%2C${lon}`;
+  // Mensagens vindas do mapa
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.source !== frame.current?.contentWindow || !e.data?.romy) return;
+      const d = e.data;
+      if (d.type === 'ready') {
+        ready.current = true;
+        if (mapRegion) post({ type: 'center', lat: mapRegion.latitude, lon: mapRegion.longitude, z: zoomFor(mapRegion.latitudeDelta) });
+        pushState();
+      } else if (d.type === 'longpress') {
+        onLongPress({ nativeEvent: { coordinate: { latitude: d.lat, longitude: d.lon } } });
+      } else if (d.type === 'select') {
+        const found = localEvents.find((ev) => String(ev.id) === String(d.id));
+        if (found) onSelectEvent(found);
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [mapRegion, localEvents, onLongPress, onSelectEvent, post, pushState]);
+
+  // Eventos, localização e ponto escolhido mudaram
+  useEffect(() => { if (ready.current) pushState(); }, [pushState]);
 
   return (
-    <View style={[styles.container, style]}>
-      {/* Map Embed for Web */}
-      <View style={styles.mapFrameWrapper}>
-        <iframe
-          title="Romy Web Map"
-          src={iframeSrc}
-          style={{
-            width: '100%',
-            height: '100%',
-            border: 'none',
-            filter: 'invert(90%) hue-rotate(180deg) brightness(95%) contrast(90%)',
-          }}
-        />
+    <View style={[s.container, style]}>
+      <View style={s.frame}>
+        <iframe ref={frame} title="Mapa da região" srcDoc={WEB_MAP_DOC} style={{ width: '100%', height: '100%', border: 'none' }} />
       </View>
 
-      {/* Local Events Bar Overlay */}
-      <View style={styles.eventsOverlay}>
-        <View style={styles.eventsHeaderRow}>
-          <Compass size={18} color={colors.primary} />
-          <Text style={styles.eventsHeading}>Eventos Rolando na Região ({localEvents.length})</Text>
+      {draftPin ? null : (
+      <View style={s.card} pointerEvents="box-none">
+        <View style={s.head}>
+          <Compass size={20} weight="duotone" color={colors.primary} />
+          <Text style={s.heading}>{localEvents.length === 1 ? '1 evento rolando por perto' : `${localEvents.length} eventos rolando por perto`}</Text>
         </View>
 
         {localEvents.length === 0 ? (
-          <View style={styles.noEventsBadge}>
-            <Text style={styles.noEventsText}>Nenhum evento criado por perto ainda.</Text>
-          </View>
+          <Text style={s.empty}>Ninguém criou um evento por perto ainda. Segure no mapa, no endereço, para criar o primeiro.</Text>
         ) : (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eventsList}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.list}>
             {localEvents.map((evt) => {
-              const iconObj = AVAILABLE_EVENT_ICONS.find((i) => i.id === evt.icon);
-              const IconComp = iconObj?.component;
-
+              const Glyph = eventIcon(evt.icon)?.component ?? MapPin;
               return (
-                <TouchableOpacity
-                  key={evt.id}
-                  style={styles.eventChip}
-                  activeOpacity={0.8}
-                  onPress={() => onSelectEvent(evt)}
-                >
-                  <View style={styles.iconCircle}>
-                    {IconComp ? (
-                      <IconComp size={16} color={colors.primary} />
-                    ) : (
-                      <Text style={{ fontSize: 14 }}>{evt.icon || '📍'}</Text>
-                    )}
+                <Pressable key={evt.id} onPress={() => onSelectEvent(evt)} accessibilityRole="button" accessibilityLabel={`Ver evento ${evt.title || ''}`} style={({ pressed }) => [s.chip, pressed && { transform: [{ scale: 0.98 }] }]}>
+                  <View style={s.chipIcon}><Glyph size={22} weight="duotone" color={colors.primary} /></View>
+                  <View style={{ maxWidth: 170 }}>
+                    <Text style={s.chipTitle} numberOfLines={1}>{evt.title || 'Evento'}</Text>
+                    <Text style={s.chipPlace} numberOfLines={1}>{evt.location_name || 'Ver detalhes'}</Text>
                   </View>
-                  <View style={styles.eventTextGroup}>
-                    <Text style={styles.eventTitle} numberOfLines={1}>{evt.title || 'Evento'}</Text>
-                    <Text style={styles.eventLocation} numberOfLines={1}>
-                      {evt.location_name || 'Ver detalhes'}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </ScrollView>
         )}
       </View>
+      )}
 
       {children}
     </View>
@@ -107,89 +114,20 @@ RomyMap.displayName = 'RomyMapWeb';
 
 export default RomyMap;
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    position: 'relative',
-    backgroundColor: '#0a0a0c',
+const getStyles = (c: ThemeColors) => StyleSheet.create({
+  container: { flex: 1, position: 'relative', backgroundColor: c.background },
+  frame: { flex: 1, width: '100%', height: '100%', overflow: 'hidden' },
+  card: {
+    position: 'absolute', bottom: 16, left: 16, right: 16, padding: 14, gap: 10, borderRadius: 22,
+    backgroundColor: c.card, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border,
+    shadowColor: '#000', shadowOpacity: 0.18, shadowOffset: { width: 0, height: 6 }, shadowRadius: 16, elevation: 6,
   },
-  mapFrameWrapper: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-    overflow: 'hidden',
-  },
-  eventsOverlay: {
-    position: 'absolute',
-    bottom: 40,
-    left: 16,
-    right: 16,
-    backgroundColor: 'rgba(18, 18, 22, 0.92)',
-    borderRadius: 18,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    shadowColor: '#000',
-    shadowOpacity: 0.4,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 10,
-  },
-  eventsHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: spacing.xs,
-  },
-  eventsHeading: {
-    ...typography.caption,
-    color: colors.textPrimary,
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  eventsList: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingVertical: 4,
-  },
-  eventChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  iconCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  eventTextGroup: {
-    maxWidth: 160,
-  },
-  eventTitle: {
-    ...typography.caption,
-    color: '#FFF',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  eventLocation: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    fontSize: 11,
-  },
-  noEventsBadge: {
-    paddingVertical: 6,
-  },
-  noEventsText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    fontSize: 12,
-  },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  heading: { fontSize: 15, fontWeight: '700', color: c.textPrimary },
+  empty: { fontSize: 14, lineHeight: 20, color: c.textSecondary },
+  list: { gap: 10, paddingVertical: 2 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, paddingRight: 14, borderRadius: 16, backgroundColor: c.surface },
+  chipIcon: { width: 40, height: 40, borderRadius: 14, backgroundColor: c.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  chipTitle: { fontSize: 15, fontWeight: '700', color: c.textPrimary },
+  chipPlace: { fontSize: 13, color: c.textSecondary },
 });

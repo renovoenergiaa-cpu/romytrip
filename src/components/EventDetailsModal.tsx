@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, ActivityIndicator, FlatList } from 'react-native';
-import { X, MapPin, Calendar, Clock, UserCheck, Check, X as XIcon } from 'lucide-react-native';
-import { AVAILABLE_EVENT_ICONS } from './CreateEventModal';
-import { supabase } from '../lib/supabase';
-import { colors, spacing, typography } from '../theme';
+import { useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Sheet } from './Sheet';
+import { useTheme, type ThemeColors } from '../theme';
 import { useRequestJoinEvent, useEventRequests, useUpdateEventRequest, useUserEventRequestStatus } from '../hooks/useEvents';
+import { showError } from '../lib/dialogs';
+import { eventIcon } from '../features/events/eventIcons';
+import { Avatar } from '../features/onboarding/components';
+import { CalendarBlank, Check, Clock, MapPin, UserCheck, X, Compass } from '../features/onboarding/icons';
 
 interface EventDetailsModalProps {
   visible: boolean;
@@ -13,403 +15,167 @@ interface EventDetailsModalProps {
   currentUserId: string | null;
 }
 
-export default function EventDetailsModal({ visible, event, onClose, currentUserId }: EventDetailsModalProps) {
-  const isOwner = event ? currentUserId === event.user_id : false;
-  const [activeTab, setActiveTab] = useState<'details' | 'requests'>('details');
+const clock = (iso: string) => {
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+};
+const longDate = (iso: string) => {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const text = d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  return text.charAt(0).toUpperCase() + text.slice(1);
+};
 
-  const { data: requests, isLoading: isLoadingRequests } = useEventRequests(isOwner && event ? event.id : null);
-  const { mutate: requestJoin, isPending: isRequesting } = useRequestJoinEvent();
-  const { data: userRequestStatus, isLoading: isLoadingStatus } = useUserEventRequestStatus(event?.id ?? null);
+export default function EventDetailsModal({ visible, event, onClose, currentUserId }: EventDetailsModalProps) {
+  const { colors } = useTheme();
+  const s = useMemo(() => getStyles(colors), [colors]);
+  const isOwner = event ? currentUserId === event.user_id : false;
+  const [tab, setTab] = useState<'details' | 'requests'>('details');
+
+  const { data: requests, isLoading: loadingRequests, isError: requestsFailed, refetch: refetchRequests } = useEventRequests(isOwner && event ? event.id : null);
+  const { mutate: requestJoin, isPending: requesting } = useRequestJoinEvent();
+  const { data: myStatus, isLoading: loadingStatus } = useUserEventRequestStatus(event?.id ?? null);
   const { mutate: updateRequest } = useUpdateEventRequest();
 
-  // Reset tab when modal opens
-  useEffect(() => {
-    if (visible) {
-      setActiveTab('details');
-    }
-  }, [visible]);
+  const pending = requests?.filter((r: any) => r.status === 'pending').length ?? 0;
+  const EventGlyph = eventIcon(event?.icon)?.component ?? Compass;
+  const organizer = String(event?.users?.name ?? '').trim() || 'Viajante';
 
-  const iconObj = event ? AVAILABLE_EVENT_ICONS.find(i => i.id === event.icon) : null;
-  const IconComp = iconObj?.component;
-
-  if (!event) return null;
-
-  const handleJoin = () => {
-    if (!event.id) return;
-    requestJoin({ eventId: event.id });
-  };
-
-  const handleAccept = (requestId: string) => {
-    updateRequest({ requestId, status: 'accepted' });
-  };
-
-  const handleReject = (requestId: string) => {
-    updateRequest({ requestId, status: 'rejected' });
-  };
-
-  const formatTime = (isoString: string) => {
-    const d = new Date(isoString);
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
-  const formatDate = (isoString: string) => {
-    const d = new Date(isoString);
-    return d.toLocaleDateString();
-  };
-
-  const defaultAvatar = 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80';
-  const ownerAvatar = event.users?.photos?.[0] || defaultAvatar;
-
-  const renderRequest = ({ item }: { item: any }) => {
-    const avatar = item.users?.photos?.[0] || defaultAvatar;
-    return (
-      <View style={styles.requestCard}>
-        <Image source={{ uri: avatar }} style={styles.requestAvatar} />
-        <View style={styles.requestInfo}>
-          <Text style={styles.requestName}>{item.users?.name || 'Viajante'}</Text>
-          <Text style={styles.requestStatus}>Status: {
-            item.status === 'pending' ? 'Pendente' : 
-            item.status === 'accepted' ? 'Aceito' : 'Recusado'
-          }</Text>
-        </View>
-        {item.status === 'pending' && (
-          <View style={styles.requestActions}>
-            <TouchableOpacity style={styles.actionBtnReject} onPress={() => handleReject(item.id)}>
-              <XIcon size={16} color="#FFF" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtnAccept} onPress={() => handleAccept(item.id)}>
-              <Check size={16} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-    );
-  };
+  const close = () => { setTab('details'); onClose(); };
+  const answer = (requestId: string, status: 'accepted' | 'rejected') =>
+    updateRequest({ requestId, status }, { onError: () => showError('Não foi possível responder', 'Tente de novo em instantes.') });
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={true}>
-      <View style={styles.overlay}>
-        <View style={styles.content}>
-          <View style={styles.header}>
-            <View style={styles.iconCircle}>
-              {IconComp ? (
-                <IconComp size={28} color={colors.primary} />
-              ) : (
-                <Text style={styles.eventIcon}>{event.icon}</Text>
-              )}
+    <Sheet visible={visible && !!event} onClose={close} title={event?.title || 'Evento'} fill>
+      {event ? (
+        <>
+          <View style={s.head}>
+            <View style={s.iconTile}><EventGlyph size={28} weight="duotone" color={colors.primary} /></View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={s.by}>Organizado por</Text>
+              <View style={s.organizer}>
+                <Avatar photo={event.users?.photos?.[0]} name={organizer} size={24} />
+                <Text style={s.organizerName} numberOfLines={1}>{organizer}</Text>
+              </View>
             </View>
-            <View style={{ flex: 1, paddingHorizontal: spacing.md }}>
-              <Text style={styles.title} numberOfLines={2}>{event.title}</Text>
-            </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <X size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
           </View>
 
-          {isOwner && (
-            <View style={styles.tabs}>
-              <TouchableOpacity 
-                style={[styles.tab, activeTab === 'details' && styles.activeTab]}
-                onPress={() => setActiveTab('details')}
-              >
-                <Text style={[styles.tabText, activeTab === 'details' && styles.activeTabText]}>Detalhes</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.tab, activeTab === 'requests' && styles.activeTab]}
-                onPress={() => setActiveTab('requests')}
-              >
-                <Text style={[styles.tabText, activeTab === 'requests' && styles.activeTabText]}>
-                  Pedidos {requests?.filter(r => r.status === 'pending').length ? `(${requests.filter(r => r.status === 'pending').length})` : ''}
-                </Text>
-              </TouchableOpacity>
+          {isOwner ? (
+            <View style={s.tabs} accessibilityRole="tablist">
+              {([['details', 'Detalhes'], ['requests', pending ? `Pedidos (${pending})` : 'Pedidos']] as const).map(([id, label]) => (
+                <Pressable key={id} onPress={() => setTab(id)} accessibilityRole="tab" accessibilityState={{ selected: tab === id }} style={[s.tab, tab === id && s.tabOn]}>
+                  <Text style={[s.tabText, tab === id && s.tabTextOn]}>{label}</Text>
+                </Pressable>
+              ))}
             </View>
-          )}
+          ) : null}
 
-          {activeTab === 'details' ? (
-            <View style={styles.tabContent}>
-              <View style={styles.ownerRow}>
-                <Image source={{ uri: ownerAvatar }} style={styles.ownerAvatar} />
-                <View>
-                  <Text style={styles.ownerLabel}>Organizado por</Text>
-                  <Text style={styles.ownerName}>{event.users?.name || 'Viajante'}</Text>
-                </View>
+          {tab === 'details' ? (
+            <View style={{ flex: 1 }}>
+              <View style={s.info}>
+                <View style={s.infoRow}><MapPin size={20} weight="duotone" color={colors.primary} /><Text style={s.infoText}>{event.location_name || 'Local marcado no mapa'}</Text></View>
+                <View style={s.infoRow}><CalendarBlank size={20} weight="duotone" color={colors.primary} /><Text style={s.infoText}>{longDate(event.start_time)}</Text></View>
+                <View style={s.infoRow}><Clock size={20} weight="duotone" color={colors.primary} /><Text style={s.infoText}>{`${clock(event.start_time)} às ${clock(event.end_time)}`}</Text></View>
               </View>
 
-              <View style={styles.infoBox}>
-                <View style={styles.infoRow}>
-                  <MapPin size={20} color={colors.primary} />
-                  <Text style={styles.infoText}>{event.location_name || 'Localização no Mapa'}</Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Calendar size={20} color={colors.primary} />
-                  <Text style={styles.infoText}>{formatDate(event.start_time)}</Text>
-                </View>
-                <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
-                  <Clock size={20} color={colors.primary} />
-                  <Text style={styles.infoText}>{formatTime(event.start_time)} - {formatTime(event.end_time)}</Text>
-                </View>
-              </View>
-
-              <Text style={styles.sectionTitle}>Sobre o Evento</Text>
-              <Text style={styles.description}>
-                {event.description || 'Nenhuma descrição fornecida.'}
-              </Text>
+              <Text style={s.section}>Sobre o evento</Text>
+              <Text style={s.description} selectable>{event.description?.trim() || 'O organizador não escreveu detalhes.'}</Text>
 
               <View style={{ flex: 1 }} />
 
-              {!isOwner && (
-                <View style={styles.footer}>
-                  {isLoadingStatus ? (
-                    <ActivityIndicator color={colors.primary} />
-                  ) : userRequestStatus === 'pending' ? (
-                    <View style={styles.statusBadge}>
-                      <Clock size={20} color={colors.textSecondary} style={{ marginRight: 8 }} />
-                      <Text style={styles.statusText}>Pedido Pendente</Text>
-                    </View>
-                  ) : userRequestStatus === 'accepted' ? (
-                    <View style={[styles.statusBadge, { backgroundColor: '#D1FAE5' }]}>
-                      <UserCheck size={20} color="#10B981" style={{ marginRight: 8 }} />
-                      <Text style={[styles.statusText, { color: '#047857' }]}>Você está no Evento!</Text>
-                      {/* Placeholder for group chat button */}
-                    </View>
-                  ) : userRequestStatus === 'rejected' ? (
-                    <View style={[styles.statusBadge, { backgroundColor: '#FEE2E2' }]}>
-                      <XIcon size={20} color="#EF4444" style={{ marginRight: 8 }} />
-                      <Text style={[styles.statusText, { color: '#B91C1C' }]}>Pedido Recusado</Text>
-                    </View>
-                  ) : (
-                    <TouchableOpacity 
-                      style={[styles.joinButton, isRequesting && { opacity: 0.7 }]} 
-                      onPress={handleJoin}
-                      disabled={isRequesting}
-                    >
-                      {isRequesting ? (
-                        <ActivityIndicator color={colors.surface} />
-                      ) : (
-                        <Text style={styles.joinText}>Pedir para Entrar</Text>
-                      )}
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
+              {!isOwner ? (
+                loadingStatus ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : myStatus === 'pending' ? (
+                  <View style={s.statusBox}><Clock size={20} weight="duotone" color={colors.textSecondary} /><Text style={s.statusText}>Pedido enviado, aguardando resposta</Text></View>
+                ) : myStatus === 'accepted' ? (
+                  <View style={[s.statusBox, { backgroundColor: colors.successSoft }]}><UserCheck size={20} weight="duotone" color={colors.success} /><Text style={[s.statusText, { color: colors.success }]}>Você está no evento</Text></View>
+                ) : myStatus === 'rejected' ? (
+                  <View style={[s.statusBox, { backgroundColor: colors.errorSoft }]}><X size={20} weight="bold" color={colors.error} /><Text style={[s.statusText, { color: colors.error }]}>Pedido recusado</Text></View>
+                ) : (
+                  <Pressable
+                    onPress={() => event.id && requestJoin({ eventId: event.id }, { onError: () => showError('Não foi possível enviar o pedido', 'Tente de novo em instantes.') })}
+                    disabled={requesting}
+                    accessibilityRole="button"
+                    style={({ pressed }) => [s.cta, pressed && { transform: [{ scale: 0.98 }] }]}
+                  >
+                    {requesting ? <ActivityIndicator color={colors.onPrimary} /> : <Text style={s.ctaText}>Pedir para entrar</Text>}
+                  </Pressable>
+                )
+              ) : null}
             </View>
           ) : (
-            <View style={styles.tabContent}>
-              {isLoadingRequests ? (
-                <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.xl }} />
+            <View style={{ flex: 1 }}>
+              {loadingRequests ? (
+                <ActivityIndicator color={colors.primary} style={{ marginTop: 32 }} />
+              ) : requestsFailed ? (
+                <View style={s.center}>
+                  <Text style={s.emptyText}>Não conseguimos carregar os pedidos.</Text>
+                  <Pressable onPress={() => refetchRequests()} accessibilityRole="button" style={s.softBtn}><Text style={s.softBtnText}>Tentar de novo</Text></Pressable>
+                </View>
               ) : requests && requests.length > 0 ? (
                 <FlatList
                   data={requests}
-                  renderItem={renderRequest}
-                  keyExtractor={item => item.id}
+                  keyExtractor={(r: any) => String(r.id)}
                   showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ gap: 10 }}
+                  renderItem={({ item }: { item: any }) => {
+                    const name = String(item.users?.name ?? '').trim() || 'Viajante';
+                    return (
+                      <View style={s.request}>
+                        <Avatar photo={item.users?.photos?.[0]} name={name} size={44} />
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={s.requestName} numberOfLines={1}>{name}</Text>
+                          <Text style={s.requestStatus}>{item.status === 'pending' ? 'Aguardando você' : item.status === 'accepted' ? 'Aceito' : 'Recusado'}</Text>
+                        </View>
+                        {item.status === 'pending' ? (
+                          <View style={s.requestActions}>
+                            <Pressable onPress={() => answer(item.id, 'rejected')} accessibilityRole="button" accessibilityLabel={`Recusar ${name}`} style={[s.round, { backgroundColor: colors.errorSoft }]}><X size={20} weight="bold" color={colors.error} /></Pressable>
+                            <Pressable onPress={() => answer(item.id, 'accepted')} accessibilityRole="button" accessibilityLabel={`Aceitar ${name}`} style={[s.round, { backgroundColor: colors.successSoft }]}><Check size={20} weight="bold" color={colors.success} /></Pressable>
+                          </View>
+                        ) : null}
+                      </View>
+                    );
+                  }}
                 />
               ) : (
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyText}>Ninguém pediu para entrar ainda.</Text>
-                </View>
+                <View style={s.center}><Text style={s.emptyText}>Ninguém pediu para entrar ainda.</Text></View>
               )}
             </View>
           )}
-
-        </View>
-      </View>
-    </Modal>
+        </>
+      ) : null}
+    </Sheet>
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  content: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    height: '75%',
-    padding: spacing.lg,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  iconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primaryLight + '20',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  eventIcon: {
-    fontSize: 28,
-  },
-  title: {
-    ...typography.h2,
-    color: colors.textPrimary,
-  },
-  closeButton: {
-    padding: spacing.xs,
-  },
-  tabs: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    marginBottom: spacing.md,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-  },
-  activeTab: {
-    borderBottomWidth: 2,
-    borderBottomColor: colors.primary,
-  },
-  tabText: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  activeTabText: {
-    color: colors.primary,
-  },
-  tabContent: {
-    flex: 1,
-  },
-  ownerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  ownerAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    marginRight: spacing.sm,
-  },
-  ownerLabel: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  ownerName: {
-    ...typography.h3,
-    color: colors.textPrimary,
-  },
-  infoBox: {
-    backgroundColor: colors.background,
-    borderRadius: 16,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  infoText: {
-    ...typography.body,
-    color: colors.textPrimary,
-    marginLeft: spacing.sm,
-    flex: 1,
-  },
-  sectionTitle: {
-    ...typography.h3,
-    color: colors.textPrimary,
-    marginBottom: spacing.sm,
-  },
-  description: {
-    ...typography.body,
-    color: colors.textSecondary,
-    lineHeight: 22,
-  },
-  footer: {
-    marginTop: spacing.md,
-    paddingBottom: spacing.lg,
-  },
-  joinButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    height: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  joinText: {
-    ...typography.body,
-    color: colors.surface,
-    fontWeight: 'bold',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    backgroundColor: colors.background,
-    borderRadius: 12,
-    height: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  statusText: {
-    ...typography.body,
-    fontWeight: 'bold',
-    color: colors.textSecondary,
-  },
-  requestCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    padding: spacing.md,
-    borderRadius: 12,
-    marginBottom: spacing.md,
-  },
-  requestAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: spacing.sm,
-  },
-  requestInfo: {
-    flex: 1,
-  },
-  requestName: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  requestStatus: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  requestActions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  actionBtnReject: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#EF4444',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  actionBtnAccept: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#10B981',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyText: {
-    ...typography.body,
-    color: colors.textSecondary,
-  },
+const getStyles = (c: ThemeColors) => StyleSheet.create({
+  head: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 14 },
+  iconTile: { width: 56, height: 56, borderRadius: 18, backgroundColor: c.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  by: { fontSize: 13, color: c.textMuted },
+  organizer: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 },
+  organizerName: { flexShrink: 1, fontSize: 16, fontWeight: '700', color: c.textPrimary },
+  tabs: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  tab: { flex: 1, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface },
+  tabOn: { backgroundColor: c.primary },
+  tabText: { fontSize: 15, fontWeight: '700', color: c.textPrimary },
+  tabTextOn: { color: c.onPrimary },
+  info: { padding: 14, borderRadius: 18, backgroundColor: c.surface, gap: 12, marginBottom: 18 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  infoText: { flex: 1, fontSize: 16, color: c.textPrimary },
+  section: { fontSize: 17, fontWeight: '700', color: c.textPrimary, marginBottom: 6 },
+  description: { fontSize: 16, lineHeight: 23, color: c.textSecondary },
+  statusBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, minHeight: 54, borderRadius: 18, backgroundColor: c.surface, paddingHorizontal: 16 },
+  statusText: { flexShrink: 1, fontSize: 16, fontWeight: '700', color: c.textSecondary, textAlign: 'center' },
+  cta: { height: 54, borderRadius: 18, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
+  ctaText: { fontSize: 17, fontWeight: '700', color: c.onPrimary },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingVertical: 32 },
+  emptyText: { fontSize: 16, color: c.textSecondary, textAlign: 'center' },
+  softBtn: { height: 44, paddingHorizontal: 20, borderRadius: 14, backgroundColor: c.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  softBtnText: { fontSize: 15, fontWeight: '700', color: c.primary },
+  request: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 16, backgroundColor: c.surface },
+  requestName: { fontSize: 16, fontWeight: '700', color: c.textPrimary },
+  requestStatus: { fontSize: 13, color: c.textSecondary },
+  requestActions: { flexDirection: 'row', gap: 8 },
+  round: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
 });

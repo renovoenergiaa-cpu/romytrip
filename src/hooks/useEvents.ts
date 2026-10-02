@@ -20,6 +20,10 @@ export function useLocalEvents(latitude: number | null, longitude: number | null
     queryFn: async () => {
       if (!latitude || !longitude) return [];
       
+      // Caixa ao redor do ponto: o banco já descarta o que está longe (1° de latitude ≈ 111 km)
+      const dLat = radiusKm / 111;
+      const dLon = radiusKm / (111 * Math.max(Math.cos((latitude * Math.PI) / 180), 0.1));
+
       const { data, error } = await supabase
         .from('local_events')
         .select(`
@@ -31,13 +35,17 @@ export function useLocalEvents(latitude: number | null, longitude: number | null
           )
         `)
         .eq('is_public', true)
+        .gte('latitude', latitude - dLat)
+        .lte('latitude', latitude + dLat)
+        .gte('longitude', longitude - dLon)
+        .lte('longitude', longitude + dLon)
         // Ensure the event hasn't already finished (or give a buffer)
         .gte('end_time', new Date().toISOString())
         .order('start_time', { ascending: true });
 
       if (error) throw error;
       
-      // Filter by distance in JS since we don't have PostGIS enabled by default in standard setup
+      // Distância exata em JS (sem PostGIS): a caixa acima só reduz o que vem do banco
       if (data) {
         return data.filter(event => {
           const dist = getDistance(latitude, longitude, event.latitude, event.longitude);
