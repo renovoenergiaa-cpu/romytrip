@@ -19,7 +19,8 @@ const toIsoDate = (value: string) => {
   return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
 };
 
-async function uploadPhoto(userId: string, uri: string, index: number): Promise<string> {
+/** Envia uma foto local para o bucket avatars e devolve a URL pública (URLs remotas passam direto). */
+export async function uploadPhoto(userId: string, uri: string, index: number): Promise<string> {
   if (uri.startsWith('http')) return uri; // já está no Storage
 
   const ext = (uri.split('?')[0].split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';

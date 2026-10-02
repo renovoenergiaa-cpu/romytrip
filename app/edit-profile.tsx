@@ -1,108 +1,127 @@
-import React, { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  TextInput,
-  Image,
-  ActivityIndicator,
-  Alert,
-  Platform,
-  SafeAreaView,
-  StatusBar,
+  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView,
+  StyleSheet, Text, View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import {
-  ChevronLeft,
-  Camera,
-  User,
-  FileText,
-  MapPin,
-  Compass,
-  Handshake,
-  Star,
-  Globe,
-  Calendar,
-  Wallet,
-  Check,
-} from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../src/lib/supabase';
-import { spacing, useTheme } from '../src/theme';
+import { useTheme, type ThemeColors } from '../src/theme';
+import { SkeletonLine } from '../src/components/SkeletonLoader';
+import { CityAutocomplete } from '../src/components/CityAutocomplete';
+import { CustomDatePicker } from '../src/components/CustomDatePicker';
+import { BigInput, ChoiceChip, OptionRow } from '../src/features/onboarding/components';
+import {
+  AirplaneTilt, Backpack, CaretLeft, Compass, HandCoins, Heart, ImageSquare, Quotes, Translate,
+  Warning, X, type Icon,
+} from '../src/features/onboarding/icons';
+import {
+  BUDGET_OPTIONS, COMPANION_OPTIONS, GENDER_OPTIONS, GENDER_PREF_OPTIONS, INTENTION_OPTIONS,
+  INTEREST_OPTIONS, LANGUAGE_OPTIONS, SOCIAL_OPTIONS, TRAVEL_STYLE_OPTIONS, type Option,
+} from '../src/features/onboarding/options';
+import { uploadPhoto } from '../src/features/onboarding/saveProfile';
 
-const AVAILABLE_INTERESTS = [
-  'Café',
-  'Trilhas',
-  'Praia',
-  'Fotografia',
-  'Música',
-  'Gastronomia',
-  'Cultura',
-  'Mochilão',
-  'Aventura',
-  'Vida Noturna',
-  'Natureza',
-  'Arte',
-  'História',
-  'Esportes',
-];
+const MAX_PHOTOS = 4;
+const MIN_BIO = 20;
+const MAX_BIO = 300;
+const MIN_INTERESTS = 3;
 
-const AVAILABLE_LANGUAGES = [
-  'Português',
-  'Inglês',
-  'Espanhol',
-  'Francês',
-  'Italiano',
-  'Alemão',
-  'Japonês',
-  'Mandarim',
-];
+// A Editar perfil antiga gravava orçamento por extenso; o cadastro usa $…$$$$.
+const LEGACY_BUDGET: Record<string, string> = { 'Econômico': '$', 'Conforto': '$$$', 'Luxo': '$$$$' };
 
-const AVAILABLE_AVAILABILITIES = [
-  'Fins de semana e noites durante a semana.',
-  'Totalmente flexível (qualquer dia)',
-  'Apenas fins de semana',
-  'Apenas dias de semana',
-  'Apenas viagens de férias',
-];
+type Draft = {
+  photos: string[];
+  name: string;
+  bio: string;
+  city: string;
+  sex: string;
+  languages: string[];
+  destination: string;
+  checkIn: string;
+  checkOut: string;
+  isFlexible: boolean;
+  companions: string;
+  travelStyles: string[];
+  interests: string[];
+  budget: string;
+  costSplit: boolean;
+  group: boolean;
+  onePerson: boolean;
+  invitations: boolean;
+  intentions: string[];
+  genderPreference: string;
+};
 
-const AVAILABLE_BUDGETS = ['Econômico', 'Conforto', 'Luxo'];
+/** Só mantém valores conhecidos: descarta o que a tela antiga gravou no campo errado. */
+const known = (ids: unknown, options: Option[]) =>
+  Array.isArray(ids) ? ids.filter((id): id is string => options.some((o) => o.id === id)) : [];
+const knownOne = (id: unknown, options: Option[]) =>
+  typeof id === 'string' && options.some((o) => o.id === id) ? id : '';
 
-const QUICK_OBJECTIVES = [
-  'Conhecer pessoas para explorar a cidade, tomar café, fazer trilhas e trocar experiências.',
-  'Fazer amizades locais e passear pela cidade.',
-  'Companhia para eventos, shows e vida noturna.',
-  'Companheiro(a) de viagem para dividir custos.',
-];
+function toDraft(p: any): Draft {
+  return {
+    photos: (p.photos || []).filter((x: unknown) => typeof x === 'string' && x.startsWith('http')).slice(0, MAX_PHOTOS),
+    name: p.name || '',
+    bio: p.bio || '',
+    city: p.city || '',
+    sex: knownOne(p.sex, GENDER_OPTIONS),
+    languages: known(p.languages, LANGUAGE_OPTIONS),
+    destination: p.destination && p.destination !== 'Em casa' ? p.destination : '',
+    checkIn: p.check_in || '',
+    checkOut: p.check_out || '',
+    isFlexible: !!p.is_flexible,
+    companions: knownOne(p.companions, COMPANION_OPTIONS),
+    travelStyles: known(p.travel_styles, TRAVEL_STYLE_OPTIONS),
+    interests: known(p.interests, INTEREST_OPTIONS),
+    budget: knownOne(LEGACY_BUDGET[p.budget] ?? p.budget, BUDGET_OPTIONS),
+    costSplit: !!p.cost_split,
+    group: !!p.group_travel,
+    onePerson: !!p.one_person,
+    invitations: !!p.invitations,
+    intentions: known(p.connection_intentions, INTENTION_OPTIONS),
+    genderPreference: knownOne(p.gender_preference, GENDER_PREF_OPTIONS),
+  };
+}
+
+/** Primeiro item que falta, na ordem da tela (null = pode salvar). */
+function firstMissing(d: Draft): string | null {
+  if (d.photos.length === 0) return 'Adicione pelo menos uma foto';
+  if (d.name.trim().length < 2) return 'Preencha seu nome';
+  if (d.bio.trim().length < MIN_BIO) return `A bio precisa de mais ${MIN_BIO - d.bio.trim().length} caracteres`;
+  if (!d.city.trim()) return 'Escolha sua cidade';
+  if (!d.sex) return 'Escolha como você se identifica';
+  if (!d.languages.length) return 'Escolha pelo menos um idioma';
+  if (!d.destination.trim()) return 'Escolha sua próxima viagem';
+  if (!d.isFlexible && (!d.checkIn || !d.checkOut)) return 'Escolha as datas ou marque que ainda não sabe';
+  if (!d.isFlexible && new Date(d.checkOut) < new Date(d.checkIn)) return 'A volta precisa ser depois da ida';
+  if (!d.companions) return 'Diga com quem você costuma viajar';
+  if (!d.travelStyles.length) return 'Escolha pelo menos um jeito de viajar';
+  if (d.interests.length < MIN_INTERESTS) return `Escolha pelo menos ${MIN_INTERESTS} interesses`;
+  if (!d.budget) return 'Escolha uma faixa de orçamento';
+  if (!(d.costSplit || d.group || d.onePerson || d.invitations)) return 'Escolha o que você topa na estrada';
+  if (!d.intentions.length) return 'Escolha o que você procura';
+  if (!d.genderPreference) return 'Escolha quem você quer ver primeiro';
+  return null;
+}
+
+const toIsoDate = (value: string) => {
+  if (!value) return null;
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+};
 
 export default function EditProfileScreen() {
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const { colors, isDark } = useTheme();
-  const styles = getStyles(colors, isDark);
+  const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
 
-  const [name, setName] = useState('');
-  const [bio, setBio] = useState('');
-  const [city, setCity] = useState('');
-  const [destination, setDestination] = useState('');
-  const [objective, setObjective] = useState('');
-  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
-  const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
-  const [selectedAvailability, setSelectedAvailability] = useState('');
-  const [selectedBudget, setSelectedBudget] = useState('Conforto');
-  const [photoUrl, setPhotoUrl] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-
-  const { data: profile, isLoading } = useQuery({
+  const { data: profile, isLoading, isError, refetch } = useQuery({
     queryKey: ['myProfile'],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
-
       const { data, error } = await supabase
         .from('users')
         .select(`
@@ -111,689 +130,427 @@ export default function EditProfileScreen() {
           travel_styles, interests, budget, cost_split,
           group_travel, one_person, invitations, is_free,
           created_at, updated_at, connection_intentions,
-          gender_preference, privacy_settings, dob, plan
+          gender_preference, privacy_settings, dob, plan, languages
         `)
         .eq('id', user.id)
         .single();
-
       if (error) throw error;
       return data;
     },
   });
 
-  useEffect(() => {
-    if (profile) {
-      setName(profile.name || '');
-      setBio(profile.bio || '');
-      setCity(profile.city || '');
-      setDestination(profile.destination || 'Em casa');
-      setObjective(
-        profile.connection_intentions?.[0] ||
-        (profile as any).connection_objective ||
-        'Conhecer pessoas para explorar a cidade, tomar café, fazer trilhas e trocar experiências.'
-      );
-      setSelectedInterests(
-        Array.isArray(profile.travel_styles) && profile.travel_styles.length > 0
-          ? profile.travel_styles
-          : ['Café', 'Trilhas', 'Praia', 'Fotografia', 'Música']
-      );
-      setSelectedLanguages(
-        Array.isArray(profile.interests) && profile.interests.length > 0
-          ? profile.interests
-          : ['Português', 'Inglês']
-      );
-      setSelectedAvailability(
-        profile.companions || 'Fins de semana e noites durante a semana.'
-      );
-      setSelectedBudget(profile.budget || 'Conforto');
-      setPhotoUrl(profile.photos?.[0] || '');
-    }
-  }, [profile]);
-
-  const toggleInterest = (item: string) => {
-    Haptics.selectionAsync();
-    setSelectedInterests((prev) =>
-      prev.includes(item) ? prev.filter((i) => i !== item) : [...prev, item]
-    );
-  };
-
-  const toggleLanguage = (item: string) => {
-    Haptics.selectionAsync();
-    setSelectedLanguages((prev) =>
-      prev.includes(item) ? prev.filter((i) => i !== item) : [...prev, item]
-    );
-  };
-
-  const pickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0].uri) {
-        setPhotoUrl(result.assets[0].uri);
-      }
-    } catch (error) {
-      Alert.alert('Erro', 'Não foi possível selecionar a imagem.');
-    }
-  };
-
-  const handleSave = async () => {
-    if (!name.trim()) {
-      Alert.alert('Atenção', 'O nome não pode ficar em branco.');
-      return;
-    }
-
-    try {
-      setIsSaving(true);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Sessão expirada');
-
-      const currentPhotos = profile?.photos || [];
-      const updatedPhotos = photoUrl
-        ? [photoUrl, ...currentPhotos.filter((p: string) => p !== photoUrl)]
-        : currentPhotos;
-
-      // Persist to all real columns in Supabase
-      const updateData = {
-        name: name.trim(),
-        bio: bio.trim(),
-        city: city.trim(),
-        destination: destination.trim() || 'Em casa',
-        connection_intentions: objective.trim() ? [objective.trim()] : [],
-        travel_styles: selectedInterests,
-        interests: selectedLanguages, // stored in interests text[]
-        companions: selectedAvailability, // stored in companions text
-        budget: selectedBudget,
-        photos: updatedPhotos,
-        updated_at: new Date().toISOString(),
-      };
-
-      const { error } = await supabase
-        .from('users')
-        .update(updateData)
-        .eq('id', user.id);
-
-      if (error) throw error;
-
-      // Invalidate both myProfile and discoveryTravelers so the rest of the app updates in real-time
-      await queryClient.invalidateQueries({ queryKey: ['myProfile'] });
-      await queryClient.invalidateQueries({ queryKey: ['discoveryTravelers'] });
-
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Sucesso', 'Perfil atualizado com sucesso na base de dados!', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
-    } catch (error: any) {
-      Alert.alert('Erro', error.message || 'Falha ao salvar as alterações do perfil.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const defaultAvatar =
-    'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80';
-
   if (isLoading) {
     return (
-      <View style={[styles.container, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color="#6338FA" />
+      <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top + 16, paddingHorizontal: 20, gap: 16 }}>
+        <SkeletonLine width="50%" height={28} borderRadius={8} />
+        <SkeletonLine width="100%" height={260} borderRadius={20} />
+        <SkeletonLine width="100%" height={60} borderRadius={18} />
+        <SkeletonLine width="100%" height={140} borderRadius={18} />
       </View>
     );
   }
 
+  if (isError || !profile) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+        <Text style={{ fontSize: 17, fontWeight: '600', color: colors.textPrimary }}>Não conseguimos carregar seu perfil</Text>
+        <Pressable onPress={() => refetch()} style={{ paddingHorizontal: 20, height: 48, borderRadius: 16, justifyContent: 'center', backgroundColor: colors.primarySoft }}>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: colors.primary }}>Tentar de novo</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return <EditForm profile={profile} />;
+}
+
+function EditForm({ profile }: { profile: any }) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
+  const s = useMemo(() => getStyles(colors), [colors]);
+
+  const initial = useMemo(() => toDraft(profile), [profile]);
+  const [draft, setDraft] = useState<Draft>(initial);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
+  const missing = firstMissing(draft);
+
+  const set = <K extends keyof Draft>(key: K, value: Draft[K]) => {
+    setError(null);
+    setDraft((d) => ({ ...d, [key]: value }));
+  };
+  const toggle = (key: 'languages' | 'travelStyles' | 'interests' | 'intentions', id: string) =>
+    set(key, draft[key].includes(id) ? draft[key].filter((x) => x !== id) : [...draft[key], id]);
+
+  const leave = () => router.back();
+  const handleBack = () => {
+    if (!dirty) return leave();
+    const msg = 'Suas alterações não salvas serão perdidas.';
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm(`Sair sem salvar? ${msg}`)) leave();
+    } else {
+      Alert.alert('Sair sem salvar?', msg, [
+        { text: 'Continuar editando', style: 'cancel' },
+        { text: 'Sair', style: 'destructive', onPress: leave },
+      ]);
+    }
+  };
+
+  const pickPhoto = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 5], quality: 0.8 });
+      if (!result.canceled && result.assets?.[0]?.uri) set('photos', [...draft.photos, result.assets[0].uri].slice(0, MAX_PHOTOS));
+    } catch {
+      setError('Não foi possível abrir suas fotos.');
+    }
+  };
+
+  const makeCover = (i: number) => {
+    if (i === 0) return;
+    Haptics.selectionAsync();
+    const next = [...draft.photos];
+    const [photo] = next.splice(i, 1);
+    set('photos', [photo, ...next]);
+  };
+
+  const handleSave = async () => {
+    if (missing || !dirty || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Sua sessão expirou. Entre de novo para salvar.');
+
+      // Fotos novas sobem para o Storage; nunca gravamos caminho local do aparelho.
+      const photos: string[] = [];
+      for (let i = 0; i < draft.photos.length; i++) {
+        try {
+          photos.push(await uploadPhoto(user.id, draft.photos[i], i));
+        } catch (e) {
+          console.warn('Falha ao enviar foto', i, e);
+        }
+      }
+      if (photos.length === 0) throw new Error('Não conseguimos enviar suas fotos. Verifique a conexão.');
+
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({
+          photos,
+          name: draft.name.trim(),
+          bio: draft.bio.trim(),
+          city: draft.city.trim(),
+          sex: draft.sex,
+          languages: draft.languages,
+          destination: draft.destination.trim(),
+          check_in: draft.isFlexible ? null : toIsoDate(draft.checkIn),
+          check_out: draft.isFlexible ? null : toIsoDate(draft.checkOut),
+          is_flexible: draft.isFlexible,
+          companions: draft.companions,
+          travel_styles: draft.travelStyles,
+          interests: draft.interests,
+          budget: draft.budget,
+          cost_split: draft.costSplit,
+          group_travel: draft.group,
+          one_person: draft.onePerson,
+          invitations: draft.invitations,
+          connection_intentions: draft.intentions,
+          gender_preference: draft.genderPreference,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+      if (updateError) throw new Error('Não foi possível salvar. Tente de novo em instantes.');
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['myProfile'] }),
+        queryClient.invalidateQueries({ queryKey: ['discoveryTravelers'] }),
+      ]);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.back();
+    } catch (e: any) {
+      setError(e?.message ?? 'Algo deu errado. Tente de novo.');
+      setSaving(false);
+    }
+  };
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#09090B' : '#F8F9FA' }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => {
-            Haptics.selectionAsync();
-            router.back();
-          }}
-          style={styles.backButton}
+    <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Cabeçalho */}
+      <View style={[s.header, { paddingTop: insets.top + 8 }]}>
+        <Pressable
+          onPress={handleBack}
+          accessibilityRole="button"
+          accessibilityLabel="Voltar"
+          hitSlop={8}
+          style={({ pressed }) => [s.backBtn, pressed && s.pressed]}
         >
-          <ChevronLeft size={26} color={isDark ? '#FFFFFF' : '#111827'} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Editar perfil</Text>
-        <TouchableOpacity
-          onPress={handleSave}
-          disabled={isSaving}
-          style={styles.saveButton}
-        >
-          {isSaving ? (
-            <ActivityIndicator size="small" color="#6338FA" />
-          ) : (
-            <Text style={styles.saveButtonText}>Salvar</Text>
-          )}
-        </TouchableOpacity>
+          <CaretLeft size={20} weight="bold" color={colors.textPrimary} />
+        </Pressable>
+        <Text style={s.headerTitle} accessibilityRole="header">Editar perfil</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Avatar section */}
-        <View style={styles.avatarSection}>
-          <View style={styles.avatarContainer}>
-            <Image source={{ uri: photoUrl || defaultAvatar }} style={styles.avatar} />
-            <TouchableOpacity
-              style={styles.cameraBadge}
-              onPress={pickImage}
-              activeOpacity={0.8}
-            >
-              <Camera size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity onPress={pickImage} activeOpacity={0.7}>
-            <Text style={styles.changePhotoText}>Alterar foto de perfil</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* 1. Nome Completo */}
-        <View style={styles.formCard}>
-          <View style={styles.labelRow}>
-            <User size={15} color="#6338FA" strokeWidth={2.2} />
-            <Text style={styles.label}>Nome Completo</Text>
-          </View>
-          <TextInput
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="Seu nome"
-            placeholderTextColor={isDark ? '#71717A' : '#9CA3AF'}
-          />
-        </View>
-
-        {/* 2. Cidade de Origem */}
-        <View style={styles.formCard}>
-          <View style={styles.labelRow}>
-            <MapPin size={15} color="#6338FA" strokeWidth={2.2} />
-            <Text style={styles.label}>Cidade de Origem / Localização</Text>
-          </View>
-          <TextInput
-            style={styles.input}
-            value={city}
-            onChangeText={setCity}
-            placeholder="Ex: Cabo Frio, Rio de Janeiro, Brasil"
-            placeholderTextColor={isDark ? '#71717A' : '#9CA3AF'}
-          />
-        </View>
-
-        {/* 3. Sobre (Biografia) */}
-        <View style={styles.formCard}>
-          <View style={styles.labelRow}>
-            <FileText size={15} color="#6338FA" strokeWidth={2.2} />
-            <Text style={styles.label}>Sobre (Biografia)</Text>
-          </View>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={bio}
-            onChangeText={setBio}
-            placeholder="Fale um pouco sobre você, seu estilo de vida e viagens..."
-            placeholderTextColor={isDark ? '#71717A' : '#9CA3AF'}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-          />
-        </View>
-
-        {/* 4. Objetivo da Conexão */}
-        <View style={styles.formCard}>
-          <View style={styles.labelRow}>
-            <Handshake size={15} color="#059669" strokeWidth={2.2} />
-            <Text style={styles.label}>Objetivo da Conexão</Text>
-          </View>
-          <TextInput
-            style={[styles.input, styles.textAreaSmall]}
-            value={objective}
-            onChangeText={setObjective}
-            placeholder="Ex: Conhecer pessoas para explorar a cidade, tomar café e fazer trilhas..."
-            placeholderTextColor={isDark ? '#71717A' : '#9CA3AF'}
-            multiline
-            numberOfLines={2}
-            textAlignVertical="top"
-          />
-          {/* Sugestões rápidas */}
-          <Text style={styles.quickLabel}>Sugestões rápidas:</Text>
-          <View style={styles.quickRow}>
-            {QUICK_OBJECTIVES.map((sug, idx) => (
-              <TouchableOpacity
-                key={idx}
-                style={[
-                  styles.quickChip,
-                  objective === sug && styles.quickChipSelected,
-                ]}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  setObjective(sug);
-                }}
+      <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        {/* Fotos */}
+        <SectionTitle icon={ImageSquare} title="Fotos" hint="Toque numa foto para torná-la a capa." s={s} colors={colors} />
+        <View style={s.photoGrid}>
+          {Array.from({ length: MAX_PHOTOS }).map((_, i) => {
+            const uri = draft.photos[i];
+            if (uri) {
+              return (
+                <Pressable key={uri} onPress={() => makeCover(i)} accessibilityLabel={i === 0 ? 'Foto de capa' : `Tornar foto ${i + 1} a capa`} style={s.photoTile}>
+                  <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                  {i === 0 && <View style={s.coverBadge}><Text style={s.coverBadgeText}>Capa</Text></View>}
+                  <Pressable
+                    onPress={() => set('photos', draft.photos.filter((_, j) => j !== i))}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remover foto ${i + 1}`}
+                    hitSlop={6}
+                    style={s.removePhoto}
+                  >
+                    <X size={14} weight="bold" color="#FFFFFF" />
+                  </Pressable>
+                </Pressable>
+              );
+            }
+            const isNext = i === draft.photos.length;
+            return (
+              <Pressable
+                key={`empty-${i}`}
+                onPress={isNext ? pickPhoto : undefined}
+                disabled={!isNext}
+                accessibilityRole="button"
+                accessibilityLabel="Adicionar foto"
+                style={({ pressed }) => [s.photoTile, s.photoEmpty, !isNext && { opacity: 0.45 }, pressed && s.pressed]}
               >
-                <Text
-                  style={[
-                    styles.quickChipText,
-                    objective === sug && styles.quickChipTextSelected,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {sug}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+                <ImageSquare size={28} weight="duotone" color={colors.primary} />
+                {isNext && <Text style={s.photoEmptyText}>Adicionar</Text>}
+              </Pressable>
+            );
+          })}
         </View>
 
-        {/* 5. Próximo Destino / Viagem Atual */}
-        <View style={styles.formCard}>
-          <View style={styles.labelRow}>
-            <Compass size={15} color="#0D9488" strokeWidth={2.2} />
-            <Text style={styles.label}>Viagem Atual / Próximo Destino</Text>
-          </View>
-          <TextInput
-            style={styles.input}
-            value={destination}
-            onChangeText={setDestination}
-            placeholder="Ex: Em casa ou Paris, França"
-            placeholderTextColor={isDark ? '#71717A' : '#9CA3AF'}
-          />
+        {/* Sobre você */}
+        <SectionTitle icon={Quotes} title="Sobre você" s={s} colors={colors} />
+        <Text style={s.label}>Nome</Text>
+        <BigInput value={draft.name} onChangeText={(t) => set('name', t.slice(0, 40))} placeholder="Seu nome ou apelido" autoCapitalize="words" accessibilityLabel="Nome" style={s.input} />
+        <Text style={s.label}>Bio</Text>
+        <BigInput
+          multiline
+          value={draft.bio}
+          onChangeText={(t) => set('bio', t.slice(0, MAX_BIO))}
+          placeholder="Conte algo que só quem viaja com você sabe"
+          accessibilityLabel="Bio"
+          textAlignVertical="top"
+          style={[s.input, { minHeight: 120, paddingTop: 14, fontWeight: '400', lineHeight: 23 }]}
+        />
+        <Text style={s.counter}>{`${draft.bio.length}/${MAX_BIO}`}</Text>
+        <Text style={s.label}>Cidade onde mora</Text>
+        <CityAutocomplete value={draft.city} onChangeText={(t) => set('city', t)} placeholder="Busque sua cidade" darkTheme={isDark} />
+        <Text style={s.label}>Como você se identifica</Text>
+        <View style={s.chips}>
+          {GENDER_OPTIONS.map((o) => <ChoiceChip key={o.id} option={o} selected={draft.sex === o.id} onPress={() => set('sex', o.id)} />)}
         </View>
 
-        {/* 6. Interesses em Comum */}
-        <View style={styles.formCard}>
-          <View style={styles.labelRow}>
-            <Star size={15} color="#F59E0B" fill="#F59E0B" />
-            <Text style={styles.label}>Interesses em Comum</Text>
-          </View>
-          <Text style={styles.sublabel}>Selecione as atividades que combinam com seu estilo:</Text>
-          <View style={styles.chipsWrap}>
-            {AVAILABLE_INTERESTS.map((item) => {
-              const selected = selectedInterests.includes(item);
-              return (
-                <TouchableOpacity
-                  key={item}
-                  style={[
-                    styles.selectableChip,
-                    selected && styles.selectableChipActive,
-                  ]}
-                  onPress={() => toggleInterest(item)}
-                >
-                  {selected ? <Check size={12} color="#FFFFFF" strokeWidth={3} /> : null}
-                  <Text
-                    style={[
-                      styles.selectableChipText,
-                      selected && styles.selectableChipTextActive,
-                    ]}
-                  >
-                    {item}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+        <SectionTitle icon={Translate} title="Idiomas" s={s} colors={colors} />
+        <View style={s.chips}>
+          {LANGUAGE_OPTIONS.map((o) => <ChoiceChip key={o.id} option={o} selected={draft.languages.includes(o.id)} onPress={() => toggle('languages', o.id)} />)}
         </View>
 
-        {/* 7. Idiomas */}
-        <View style={styles.formCard}>
-          <View style={styles.labelRow}>
-            <Globe size={15} color="#8B5CF6" strokeWidth={2.2} />
-            <Text style={styles.label}>Idiomas que você fala</Text>
+        {/* Viagem */}
+        <SectionTitle icon={AirplaneTilt} title="Próxima viagem" s={s} colors={colors} />
+        <CityAutocomplete value={draft.destination} onChangeText={(t) => set('destination', t)} placeholder="Cidade ou país" darkTheme={isDark} />
+        <View style={[s.datesRow, draft.isFlexible && { opacity: 0.4 }]} pointerEvents={draft.isFlexible ? 'none' : 'auto'}>
+          <View style={{ flex: 1 }}>
+            <Text style={s.label}>Ida</Text>
+            <CustomDatePicker value={draft.checkIn || null} onChange={(v) => set('checkIn', v)} placeholder="Escolher" minimumDate={new Date()} />
           </View>
-          <View style={styles.chipsWrap}>
-            {AVAILABLE_LANGUAGES.map((item) => {
-              const selected = selectedLanguages.includes(item);
-              return (
-                <TouchableOpacity
-                  key={item}
-                  style={[
-                    styles.selectableChip,
-                    selected && styles.selectableChipActive,
-                  ]}
-                  onPress={() => toggleLanguage(item)}
-                >
-                  {selected ? <Check size={12} color="#FFFFFF" strokeWidth={3} /> : null}
-                  <Text
-                    style={[
-                      styles.selectableChipText,
-                      selected && styles.selectableChipTextActive,
-                    ]}
-                  >
-                    {item}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+          <View style={{ flex: 1 }}>
+            <Text style={s.label}>Volta</Text>
+            <CustomDatePicker value={draft.checkOut || null} onChange={(v) => set('checkOut', v)} placeholder="Escolher" minimumDate={draft.checkIn ? new Date(draft.checkIn) : new Date()} />
           </View>
         </View>
+        <View style={{ marginTop: 10 }}>
+          <OptionRow multi option={{ id: 'flex', label: 'Ainda não sei as datas' }} selected={draft.isFlexible} onPress={() => set('isFlexible', !draft.isFlexible)} />
+        </View>
+        <Text style={s.label}>Com quem você costuma viajar</Text>
+        <View style={s.chips}>
+          {COMPANION_OPTIONS.map((o) => <ChoiceChip key={o.id} option={o} selected={draft.companions === o.id} onPress={() => set('companions', o.id)} />)}
+        </View>
 
-        {/* 8. Disponibilidade */}
-        <View style={styles.formCard}>
-          <View style={styles.labelRow}>
-            <Calendar size={15} color="#0D9488" strokeWidth={2.2} />
-            <Text style={styles.label}>Disponibilidade para Viagens / Encontros</Text>
-          </View>
-          <View style={styles.optionsCol}>
-            {AVAILABLE_AVAILABILITIES.map((avail) => {
-              const selected = selectedAvailability === avail;
-              return (
-                <TouchableOpacity
-                  key={avail}
-                  style={[
-                    styles.optionRow,
-                    selected && styles.optionRowActive,
-                  ]}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setSelectedAvailability(avail);
-                  }}
-                >
-                  <View style={[styles.radioCircle, selected && styles.radioCircleActive]}>
-                    {selected ? <View style={styles.radioInner} /> : null}
+        <SectionTitle icon={Backpack} title="Meu jeito de viajar" s={s} colors={colors} />
+        <View style={s.chips}>
+          {TRAVEL_STYLE_OPTIONS.map((o) => <ChoiceChip key={o.id} option={o} selected={draft.travelStyles.includes(o.id)} onPress={() => toggle('travelStyles', o.id)} />)}
+        </View>
+
+        <SectionTitle icon={Heart} title="Interesses" hint={`Pelo menos ${MIN_INTERESTS}.`} s={s} colors={colors} />
+        <View style={s.chips}>
+          {INTEREST_OPTIONS.map((o) => <ChoiceChip key={o.id} option={o} selected={draft.interests.includes(o.id)} onPress={() => toggle('interests', o.id)} />)}
+        </View>
+
+        <SectionTitle icon={HandCoins} title="Na estrada eu topo" s={s} colors={colors} />
+        <View style={s.chips}>
+          {SOCIAL_OPTIONS.map((o) => (
+            <ChoiceChip
+              key={o.id}
+              option={o}
+              selected={draft[o.id]}
+              onPress={() => {
+                const next = !draft[o.id];
+                setError(null);
+                setDraft((d) => ({
+                  ...d,
+                  [o.id]: next,
+                  // Grupo e "uma companhia por vez" se excluem
+                  ...(next && o.id === 'group' ? { onePerson: false } : null),
+                  ...(next && o.id === 'onePerson' ? { group: false } : null),
+                }));
+              }}
+            />
+          ))}
+        </View>
+        <Text style={s.label}>Orçamento por dia</Text>
+        <View style={s.list}>
+          {BUDGET_OPTIONS.map((o) => {
+            const selected = draft.budget === o.id;
+            return (
+              <OptionRow
+                key={o.id}
+                option={o}
+                selected={selected}
+                onPress={() => set('budget', o.id)}
+                leading={
+                  <View style={[s.budgetTile, selected && { backgroundColor: colors.card }]}>
+                    <Text style={[s.budgetGlyph, selected && { color: colors.primary }]}>{o.id}</Text>
                   </View>
-                  <Text style={[styles.optionText, selected && styles.optionTextActive]}>
-                    {avail}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                }
+              />
+            );
+          })}
         </View>
 
-        {/* 9. Orçamento */}
-        <View style={styles.formCard}>
-          <View style={styles.labelRow}>
-            <Wallet size={15} color="#6338FA" strokeWidth={2.2} />
-            <Text style={styles.label}>Faixa de Orçamento de Viagem</Text>
-          </View>
-          <View style={styles.budgetRow}>
-            {AVAILABLE_BUDGETS.map((b) => {
-              const selected = selectedBudget === b;
-              return (
-                <TouchableOpacity
-                  key={b}
-                  style={[
-                    styles.budgetBtn,
-                    selected && styles.budgetBtnActive,
-                  ]}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setSelectedBudget(b);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.budgetBtnText,
-                      selected && styles.budgetBtnTextActive,
-                    ]}
-                  >
-                    {b}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+        <SectionTitle icon={Compass} title="O que eu procuro" s={s} colors={colors} />
+        <View style={s.chips}>
+          {INTENTION_OPTIONS.map((o) => <ChoiceChip key={o.id} option={o} selected={draft.intentions.includes(o.id)} onPress={() => toggle('intentions', o.id)} />)}
+        </View>
+        <Text style={s.label}>Quem você quer ver primeiro</Text>
+        <View style={s.chips}>
+          {GENDER_PREF_OPTIONS.map((o) => <ChoiceChip key={o.id} option={o} selected={draft.genderPreference === o.id} onPress={() => set('genderPreference', o.id)} />)}
         </View>
       </ScrollView>
-    </SafeAreaView>
+
+      {/* Rodapé fixo */}
+      <View style={[s.footer, { paddingBottom: Math.max(insets.bottom, 12) + 4 }]}>
+        {error ? (
+          <View style={s.errorBanner} accessibilityRole="alert">
+            <Warning size={18} weight="duotone" color={colors.error} />
+            <Text style={s.errorText}>{error}</Text>
+          </View>
+        ) : null}
+        {dirty && missing ? <Text style={s.missing}>{missing}</Text> : null}
+        <Pressable
+          onPress={handleSave}
+          disabled={!dirty || !!missing || saving}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !dirty || !!missing || saving }}
+          style={({ pressed }) => [s.cta, (!dirty || missing || saving) && s.ctaDisabled, pressed && dirty && !missing && s.pressed]}
+        >
+          {saving ? (
+            <View style={s.ctaInner}>
+              <ActivityIndicator color={colors.onPrimary} />
+              <Text style={s.ctaText}>Salvando…</Text>
+            </View>
+          ) : (
+            <Text style={[s.ctaText, (!dirty || missing) && s.ctaTextDisabled]}>
+              {dirty ? 'Salvar alterações' : 'Nenhuma alteração'}
+            </Text>
+          )}
+        </Pressable>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
-const getStyles = (colors: any, isDark: boolean) =>
-  StyleSheet.create({
-    container: {
-      flex: 1,
-    },
-    loadingContainer: {
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 8 : 12,
-      paddingBottom: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: isDark ? '#222226' : '#ECEEF1',
-      backgroundColor: isDark ? '#09090B' : '#FFFFFF',
-    },
-    backButton: {
-      padding: 6,
-    },
-    headerTitle: {
-      fontSize: 18,
-      fontWeight: '700',
-      color: isDark ? '#FFFFFF' : '#111827',
-      letterSpacing: -0.3,
-    },
-    saveButton: {
-      backgroundColor: '#6338FA',
-      paddingHorizontal: 16,
-      paddingVertical: 7,
-      borderRadius: 18,
-    },
-    saveButtonText: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: '#FFFFFF',
-    },
-    scrollContent: {
-      padding: 16,
-      paddingBottom: 60,
-      gap: 12,
-    },
-    avatarSection: {
-      alignItems: 'center',
-      marginBottom: 10,
-    },
-    avatarContainer: {
-      position: 'relative',
-      marginBottom: 8,
-    },
-    avatar: {
-      width: 96,
-      height: 96,
-      borderRadius: 48,
-      backgroundColor: isDark ? '#27272A' : '#E5E7EB',
-      borderWidth: 2,
-      borderColor: isDark ? '#27272A' : '#FFFFFF',
-    },
-    cameraBadge: {
-      position: 'absolute',
-      bottom: 0,
-      right: 0,
-      backgroundColor: '#6338FA',
-      padding: 7,
-      borderRadius: 18,
-      borderWidth: 2,
-      borderColor: isDark ? '#09090B' : '#FFFFFF',
-    },
-    changePhotoText: {
-      fontSize: 13,
-      color: '#6338FA',
-      fontWeight: '600',
-    },
-    formCard: {
-      backgroundColor: isDark ? '#141416' : '#FFFFFF',
-      borderRadius: 18,
-      padding: 14,
-      borderWidth: 1,
-      borderColor: isDark ? '#222226' : '#ECEEF1',
-      shadowColor: '#000000',
-      shadowOffset: { width: 0, height: 1.5 },
-      shadowOpacity: isDark ? 0.2 : 0.03,
-      shadowRadius: 6,
-      elevation: 1,
-    },
-    labelRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      marginBottom: 8,
-    },
-    label: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: isDark ? '#FFFFFF' : '#111827',
-    },
-    sublabel: {
-      fontSize: 12,
-      color: isDark ? '#A1A1AA' : '#6B7280',
-      marginBottom: 10,
-    },
-    input: {
-      backgroundColor: isDark ? '#1C1C20' : '#F9FAFB',
-      borderRadius: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      color: isDark ? '#FFFFFF' : '#111827',
-      fontSize: 14,
-      borderWidth: 1,
-      borderColor: isDark ? '#2E2E32' : '#E5E7EB',
-    },
-    textArea: {
-      minHeight: 75,
-    },
-    textAreaSmall: {
-      minHeight: 60,
-    },
-    quickLabel: {
-      fontSize: 11,
-      color: isDark ? '#A1A1AA' : '#6B7280',
-      marginTop: 8,
-      marginBottom: 6,
-      fontWeight: '600',
-    },
-    quickRow: {
-      gap: 6,
-    },
-    quickChip: {
-      backgroundColor: isDark ? '#222226' : '#F3F4F6',
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: isDark ? '#2E2E32' : '#E5E7EB',
-    },
-    quickChipSelected: {
-      backgroundColor: isDark ? 'rgba(99, 56, 250, 0.2)' : '#F3F0FF',
-      borderColor: '#6338FA',
-    },
-    quickChipText: {
-      fontSize: 11.5,
-      color: isDark ? '#D4D4D8' : '#374151',
-    },
-    quickChipTextSelected: {
-      color: '#6338FA',
-      fontWeight: '600',
-    },
-    chipsWrap: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 7,
-      marginTop: 4,
-    },
-    selectableChip: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-      backgroundColor: isDark ? '#1C1C20' : '#F4F4F6',
-      paddingHorizontal: 11,
-      paddingVertical: 7,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: isDark ? '#2E2E32' : '#E5E7EB',
-    },
-    selectableChipActive: {
-      backgroundColor: '#6338FA',
-      borderColor: '#6338FA',
-    },
-    selectableChipText: {
-      fontSize: 12,
-      fontWeight: '500',
-      color: isDark ? '#E4E4E7' : '#374151',
-    },
-    selectableChipTextActive: {
-      color: '#FFFFFF',
-      fontWeight: '700',
-    },
-    optionsCol: {
-      gap: 8,
-      marginTop: 4,
-    },
-    optionRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      backgroundColor: isDark ? '#1C1C20' : '#F9FAFB',
-      padding: 10,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: isDark ? '#2E2E32' : '#E5E7EB',
-    },
-    optionRowActive: {
-      backgroundColor: isDark ? 'rgba(13, 148, 136, 0.15)' : '#F0FDF4',
-      borderColor: '#0D9488',
-    },
-    radioCircle: {
-      width: 18,
-      height: 18,
-      borderRadius: 9,
-      borderWidth: 2,
-      borderColor: isDark ? '#52525B' : '#D1D5DB',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    radioCircleActive: {
-      borderColor: '#0D9488',
-    },
-    radioInner: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: '#0D9488',
-    },
-    optionText: {
-      fontSize: 12.5,
-      color: isDark ? '#A1A1AA' : '#4B5563',
-      flex: 1,
-    },
-    optionTextActive: {
-      color: isDark ? '#FFFFFF' : '#111827',
-      fontWeight: '600',
-    },
-    budgetRow: {
-      flexDirection: 'row',
-      gap: 8,
-      marginTop: 6,
-    },
-    budgetBtn: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      paddingVertical: 10,
-      borderRadius: 12,
-      backgroundColor: isDark ? '#1C1C20' : '#F4F4F6',
-      borderWidth: 1,
-      borderColor: isDark ? '#2E2E32' : '#E5E7EB',
-    },
-    budgetBtnActive: {
-      backgroundColor: '#6338FA',
-      borderColor: '#6338FA',
-    },
-    budgetBtnText: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: isDark ? '#A1A1AA' : '#4B5563',
-    },
-    budgetBtnTextActive: {
-      color: '#FFFFFF',
-      fontWeight: '700',
-    },
-  });
+function SectionTitle({ icon: SectionIcon, title, hint, s, colors }: {
+  icon: Icon;
+  title: string;
+  hint?: string;
+  s: ReturnType<typeof getStyles>;
+  colors: ThemeColors;
+}) {
+  return (
+    <View style={s.sectionTitleWrap}>
+      <View style={s.sectionTitleRow}>
+        <SectionIcon size={22} weight="duotone" color={colors.primary} />
+        <Text style={s.sectionTitle}>{title}</Text>
+      </View>
+      {hint ? <Text style={s.sectionHint}>{hint}</Text> : null}
+    </View>
+  );
+}
+
+const getStyles = (c: ThemeColors) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.background },
+  pressed: { transform: [{ scale: 0.98 }] },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border,
+  },
+  backBtn: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: c.card,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: c.textPrimary },
+  content: { paddingHorizontal: 20, paddingBottom: 32, width: '100%', maxWidth: 560, alignSelf: 'center' },
+
+  sectionTitleWrap: { marginTop: 32, marginBottom: 14, gap: 4 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sectionTitle: { fontSize: 22, fontWeight: '800', color: c.textPrimary, letterSpacing: -0.4 },
+  sectionHint: { fontSize: 14, color: c.textSecondary },
+  label: { fontSize: 14, fontWeight: '600', color: c.textSecondary, marginTop: 18, marginBottom: 8 },
+  input: { fontSize: 17 },
+  counter: { alignSelf: 'flex-end', marginTop: 6, fontSize: 13, color: c.textMuted, fontVariant: ['tabular-nums'] },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  list: { gap: 10 },
+  datesRow: { flexDirection: 'row', gap: 12 },
+
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  photoTile: { width: '48%', flexGrow: 1, aspectRatio: 4 / 5, borderRadius: 18, overflow: 'hidden', backgroundColor: c.surface },
+  photoEmpty: {
+    alignItems: 'center', justifyContent: 'center', gap: 6,
+    borderWidth: 1.5, borderStyle: 'dashed', borderColor: c.primary, backgroundColor: c.primarySoft,
+  },
+  photoEmptyText: { fontSize: 14, fontWeight: '600', color: c.primary },
+  coverBadge: {
+    position: 'absolute', left: 10, top: 10, paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: 999, backgroundColor: 'rgba(10,10,12,0.6)',
+  },
+  coverBadgeText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
+  removePhoto: {
+    position: 'absolute', right: 8, top: 8, width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(10,10,12,0.6)', alignItems: 'center', justifyContent: 'center',
+  },
+  budgetTile: { width: 44, height: 44, borderRadius: 14, backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center' },
+  budgetGlyph: { fontSize: 15, fontWeight: '800', color: c.textSecondary, letterSpacing: -0.5 },
+
+  footer: {
+    paddingHorizontal: 20, paddingTop: 12, gap: 10, width: '100%', maxWidth: 560, alignSelf: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, backgroundColor: c.background,
+  },
+  missing: { textAlign: 'center', fontSize: 14, color: c.textMuted },
+  cta: {
+    height: 56, borderRadius: 18, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center',
+    shadowColor: c.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.28, shadowRadius: 12, elevation: 4,
+  },
+  ctaDisabled: { backgroundColor: c.surface, shadowOpacity: 0, elevation: 0 },
+  ctaInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  ctaText: { fontSize: 17, fontWeight: '700', color: c.onPrimary },
+  ctaTextDisabled: { color: c.textMuted },
+  errorBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 14, backgroundColor: c.errorSoft },
+  errorText: { flex: 1, fontSize: 14, fontWeight: '600', color: c.error },
+});
