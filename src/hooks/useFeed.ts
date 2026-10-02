@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { useCurrentUserId } from './useMessenger';
+import { CACHE_FOREVER, shrinkImage } from '../lib/media';
 
 // Fetch posts for the Feed
 export function useFeed(destination?: string) {
@@ -62,7 +63,8 @@ function describeMedia(uri: string, mime?: string) {
   const ext = (mime && EXT_BY_MIME[mime]) || ([...IMAGE_EXTS, ...VIDEO_EXTS].includes(rawExt) ? rawExt : 'jpg');
   const isVideo = VIDEO_EXTS.includes(ext);
   const contentType = isVideo ? `video/${ext === 'mov' ? 'quicktime' : ext}` : `image/${ext === 'jpg' ? 'jpeg' : ext}`;
-  return { ext, isVideo, contentType, maxMb: isVideo ? 50 : 15 };
+  // Vídeo de até 30 s (limite do seletor); 25 MB cobre isso com folga em qualidade de celular
+  return { ext, isVideo, contentType, maxMb: isVideo ? 25 : 15 };
 }
 
 // Create a new post
@@ -75,30 +77,36 @@ export function useCreatePost() {
       if (!user) throw new Error('Not authenticated');
 
       let fileName: string;
+      let uri = mediaUri;
 
       if (Platform.OS === 'web') {
-        const response = await fetch(mediaUri);
-        const blob = await response.blob();
-        const media = describeMedia(mediaUri, blob.type);
+        let blob = await (await fetch(uri)).blob();
+        // Foto vai reduzida (cada visualização no feed conta no limite de tráfego do Supabase)
+        if (blob.type.startsWith('image/')) {
+          const small = await shrinkImage(uri);
+          if (small.changed) { uri = small.uri; blob = await (await fetch(uri)).blob(); }
+        }
+        const media = describeMedia(uri, blob.type);
         if (blob.size > media.maxMb * 1024 * 1024) {
           throw new Error(`O arquivo é muito grande (máximo ${media.maxMb} MB).`);
         }
         fileName = `${user.id}/${Date.now()}.${media.ext}`;
         const { error: uploadError } = await supabase.storage
           .from('posts')
-          .upload(fileName, blob, { contentType: media.contentType });
+          .upload(fileName, blob, { contentType: media.contentType, cacheControl: CACHE_FOREVER });
         if (uploadError) throw uploadError;
       } else {
-        const media = describeMedia(mediaUri);
-        const fileInfo = await FileSystem.getInfoAsync(mediaUri);
+        if (!describeMedia(uri).isVideo) uri = (await shrinkImage(uri)).uri;
+        const media = describeMedia(uri);
+        const fileInfo = await FileSystem.getInfoAsync(uri);
         if (fileInfo.exists && fileInfo.size && fileInfo.size > media.maxMb * 1024 * 1024) {
           throw new Error(`O arquivo é muito grande (máximo ${media.maxMb} MB).`);
         }
         fileName = `${user.id}/${Date.now()}.${media.ext}`;
-        const base64 = await FileSystem.readAsStringAsync(mediaUri, { encoding: 'base64' });
+        const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
         const { error: uploadError } = await supabase.storage
           .from('posts')
-          .upload(fileName, decode(base64), { contentType: media.contentType, upsert: true });
+          .upload(fileName, decode(base64), { contentType: media.contentType, upsert: true, cacheControl: CACHE_FOREVER });
         if (uploadError) throw uploadError;
       }
 

@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { VideoView, useVideoPlayer } from 'expo-video';
+import { Image as ExpoImage } from 'expo-image';
 import { resolveChatMediaUrl, useChatMediaUrl } from '../../hooks/useChatMedia';
 import { useTheme, type ThemeColors } from '../../theme';
 import { showError } from '../../lib/dialogs';
@@ -110,15 +111,37 @@ function ChatImage({ uri, onOpen }: { uri: string; onOpen: (signedUri: string) =
   return (
     <Pressable onPress={() => signedUri && onOpen(signedUri)} accessibilityRole="imagebutton" accessibilityLabel="Abrir foto">
       <View style={{ width: 220, height: 264, borderRadius: 18, overflow: 'hidden', backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}>
-        {signedUri ? <Image source={{ uri: signedUri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <ActivityIndicator color={colors.primary} />}
+        {/* O link assinado muda a cada hora; a chave do cache é o arquivo, então a foto não é baixada de novo */}
+        {signedUri ? <ExpoImage source={{ uri: signedUri, cacheKey: uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : <ActivityIndicator color={colors.primary} />}
       </View>
     </Pressable>
   );
 }
 
+// O vídeo só é baixado quando a pessoa toca para ver (antes, todos os vídeos da conversa baixavam ao abrir)
 function ChatVideo({ uri }: { uri: string }) {
+  const [started, setStarted] = useState(false);
+  if (!started) {
+    return (
+      <Pressable
+        onPress={() => setStarted(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Tocar vídeo"
+        style={{ width: 240, height: 180, borderRadius: 18, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}
+      >
+        <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' }}>
+          <Play size={26} weight="fill" color="#FFFFFF" />
+        </View>
+      </Pressable>
+    );
+  }
+  return <ChatVideoPlayer uri={uri} />;
+}
+
+function ChatVideoPlayer({ uri }: { uri: string }) {
   const { data: signedUri } = useChatMediaUrl(uri);
-  const player = useVideoPlayer(signedUri ?? null, (p) => { p.loop = false; });
+  const source = signedUri ? (Platform.OS === 'web' ? signedUri : { uri: signedUri, useCaching: true }) : null;
+  const player = useVideoPlayer(source, (p) => { p.loop = false; p.play(); });
   return (
     <View style={{ width: 240, height: 180, borderRadius: 18, overflow: 'hidden', backgroundColor: '#000' }}>
       <VideoView player={player} style={{ width: '100%', height: '100%' }} nativeControls contentFit="contain" />

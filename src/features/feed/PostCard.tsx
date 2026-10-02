@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Image, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image as RNImage, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { createAudioPlayer, AudioModule } from 'expo-audio';
@@ -42,8 +43,37 @@ const WHITE = '#FFFFFF';
 const SOFT_WHITE = 'rgba(255,255,255,0.88)';
 const GLASS = 'rgba(255,255,255,0.18)';
 
+/**
+ * No web, o vídeo é baixado uma vez para a memória e repete dali. Antes, o loop podia buscar o
+ * arquivo de novo a cada volta, e cada download conta no limite de tráfego do Supabase.
+ */
+function useWebLocalVideo(uri: string) {
+  const [local, setLocal] = useState<{ from: string; url: string } | null>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    fetch(uri)
+      .then((r) => r.blob())
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setLocal({ from: uri, url: objectUrl });
+      })
+      .catch(() => { if (!cancelled) setLocal({ from: uri, url: uri }); });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [uri]);
+  return local?.from === uri ? local.url : null;
+}
+
 function PostVideo({ uri, playing, muted, fit }: { uri: string; playing: boolean; muted: boolean; fit: 'cover' | 'contain' }) {
-  const player = useVideoPlayer(uri, (p) => {
+  const webUrl = useWebLocalVideo(uri);
+  // No celular o vídeo fica guardado no aparelho: repetir ou assistir de novo não baixa de novo
+  const source = Platform.OS === 'web' ? webUrl : { uri, useCaching: true };
+  const player = useVideoPlayer(source, (p) => {
     p.loop = true;
     p.muted = muted;
     if (playing) p.play();
@@ -52,7 +82,16 @@ function PostVideo({ uri, playing, muted, fit }: { uri: string; playing: boolean
   // API do expo-video: o som se muda atribuindo ao player
   // eslint-disable-next-line react-hooks/immutability
   useEffect(() => { player.muted = muted; }, [muted, player]);
-  return <VideoView player={player} style={StyleSheet.absoluteFill} contentFit={fit} nativeControls={false} />;
+  return (
+    <>
+      <VideoView player={player} style={StyleSheet.absoluteFill} contentFit={fit} nativeControls={false} />
+      {Platform.OS === 'web' && !webUrl ? (
+        <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} pointerEvents="none">
+          <ActivityIndicator color="#FFFFFF" accessibilityLabel="Carregando vídeo" />
+        </View>
+      ) : null}
+    </>
+  );
 }
 
 export default function PostCard({ item, height, isVisible, isLiked, onLike, onOpenComments, onShare, onUserPress, onOptionsPress, isOwner }: {
@@ -100,7 +139,7 @@ export default function PostCard({ item, height, isVisible, isLiked, onLike, onO
   // Proporção real da foto (muito vertical = tela cheia; o resto fica centralizado sobre um fundo desfocado)
   useEffect(() => {
     if (isVideo || !item.media_url) return;
-    Image.getSize(item.media_url, (w, h) => { if (w > 0 && h > 0) setAspect(w / h); }, () => {});
+    RNImage.getSize(item.media_url, (w, h) => { if (w > 0 && h > 0) setAspect(w / h); }, () => {});
   }, [item.media_url, isVideo]);
 
   // Música do post: toca só enquanto ele está na tela
@@ -171,7 +210,7 @@ export default function PostCard({ item, height, isVisible, isLiked, onLike, onO
       {/* Fundo desfocado para fotos que não preenchem a tela */}
       {!fullBleed && !isVideo && (
         <View style={StyleSheet.absoluteFill}>
-          <Image source={{ uri: photoList[photoIndex] }} style={StyleSheet.absoluteFill} blurRadius={Platform.OS === 'ios' ? 40 : 25} />
+          <Image source={{ uri: photoList[photoIndex] }} style={StyleSheet.absoluteFill} blurRadius={Platform.OS === 'ios' ? 40 : 25} cachePolicy="memory-disk" />
           <BlurView intensity={Platform.OS === 'ios' ? 70 : 100} style={StyleSheet.absoluteFill} tint="dark" />
           <View style={s.dim} />
         </View>
@@ -185,7 +224,8 @@ export default function PostCard({ item, height, isVisible, isLiked, onLike, onO
         accessibilityLabel={isVideo ? (paused ? 'Tocar vídeo' : 'Pausar vídeo') : item.audio_url ? (muted ? 'Ativar som' : 'Silenciar') : undefined}
       >
         {isVideo ? (
-          <PostVideo uri={item.media_url} playing={playing} muted={muted} fit={fullBleed ? 'cover' : 'contain'} />
+          // Só o vídeo da tela é carregado; os vizinhos não baixam nada antes da hora
+          onScreen ? <PostVideo uri={item.media_url} playing={playing} muted={muted} fit={fullBleed ? 'cover' : 'contain'} /> : null
         ) : isCarousel ? (
           <FlatList
             data={photoList}
@@ -196,12 +236,12 @@ export default function PostCard({ item, height, isVisible, isLiked, onLike, onO
             onMomentumScrollEnd={(e) => setPhotoIndex(Math.round(e.nativeEvent.contentOffset.x / width))}
             renderItem={({ item: uri }) => (
               <View style={{ width, height, justifyContent: 'center' }}>
-                <Image source={{ uri }} style={{ width, height: '100%' }} resizeMode={fullBleed ? 'cover' : 'contain'} />
+                <Image source={{ uri }} style={{ width, height: '100%' }} contentFit={fullBleed ? 'cover' : 'contain'} cachePolicy="memory-disk" />
               </View>
             )}
           />
         ) : (
-          <Image source={{ uri: item.media_url }} style={StyleSheet.absoluteFill} resizeMode={fullBleed ? 'cover' : 'contain'} accessibilityLabel={`Foto de ${name}`} />
+          <Image source={{ uri: item.media_url }} style={StyleSheet.absoluteFill} contentFit={fullBleed ? 'cover' : 'contain'} cachePolicy="memory-disk" accessibilityLabel={`Foto de ${name}`} />
         )}
       </Pressable>
 

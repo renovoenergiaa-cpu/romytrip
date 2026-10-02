@@ -3,12 +3,15 @@ import { supabase } from '../lib/supabase';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
+import { AVATAR_MAX_SIDE, CACHE_FOREVER, PHOTO_MAX_SIDE, shrinkImage } from '../lib/media';
 
 const IMAGE_EXT_BY_MIME: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 const MAX_IMAGE_MB = 15;
 
-// Lê a foto escolhida. No web o seletor devolve um blob: URL (sem extensão) e o expo-file-system não existe lá.
-async function readImage(uri: string) {
+// Lê a foto escolhida, já reduzida (cada download conta no limite de tráfego do Supabase).
+// No web o seletor devolve um blob: URL (sem extensão) e o expo-file-system não existe lá.
+async function readImage(picked: string, maxSide = PHOTO_MAX_SIDE) {
+  const uri = (await shrinkImage(picked, maxSide)).uri;
   const tooBig = () => new Error(`A imagem é muito grande (máximo ${MAX_IMAGE_MB} MB).`);
   if (Platform.OS === 'web') {
     const blob = await (await fetch(uri)).blob();
@@ -27,9 +30,9 @@ async function readImage(uri: string) {
 // Capa e ícone da comunidade (a policy do bucket aceita nomes "community_…")
 async function uploadCommunityImage(communityId: string, uri: string, kind: 'icon' | 'cover') {
   if (/^https?:\/\//.test(uri)) return uri;
-  const { body, ext, contentType } = await readImage(uri);
+  const { body, ext, contentType } = await readImage(uri, kind === 'icon' ? AVATAR_MAX_SIDE : PHOTO_MAX_SIDE);
   const fileName = `community_${communityId}_${kind}_${Date.now()}.${ext}`;
-  const { error } = await supabase.storage.from('avatars').upload(fileName, body, { contentType });
+  const { error } = await supabase.storage.from('avatars').upload(fileName, body, { contentType, cacheControl: CACHE_FOREVER });
   if (error) throw error;
   return supabase.storage.from('avatars').getPublicUrl(fileName).data.publicUrl;
 }
@@ -269,7 +272,7 @@ export function useCreateCommunityPost() {
         const fileName = `${user.id}/${Date.now()}.${ext}`;
         const { error: uploadError } = await supabase.storage
           .from('posts')
-          .upload(fileName, body, { contentType });
+          .upload(fileName, body, { contentType, cacheControl: CACHE_FOREVER });
         if (uploadError) throw uploadError;
         publicUrl = supabase.storage.from('posts').getPublicUrl(fileName).data.publicUrl;
       }

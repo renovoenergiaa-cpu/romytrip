@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import {
-  ActivityIndicator, DeviceEventEmitter, Image, KeyboardAvoidingView, Modal, Pressable,
+  ActivityIndicator, DeviceEventEmitter, KeyboardAvoidingView, Modal, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -234,7 +235,7 @@ export default function ProfileScreen() {
         {/* Cartão: como os outros te veem */}
         <View style={s.heroCard}>
           {currentPhoto ? (
-            <Image source={{ uri: currentPhoto }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel={`Foto de ${firstName}`} />
+            <Image source={{ uri: currentPhoto }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" accessibilityLabel={`Foto de ${firstName}`} />
           ) : (
             <LinearGradient colors={[colors.primary, colors.accent]} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
           )}
@@ -396,7 +397,7 @@ export default function ProfileScreen() {
                   accessibilityLabel={post.description || 'Momento'}
                   style={({ pressed }) => [s.gridItem, pressed && { opacity: 0.85 }]}
                 >
-                  {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : (
+                  {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : (
                     <View style={[StyleSheet.absoluteFill, s.centered]}><ImageSquare size={24} weight="duotone" color={colors.textMuted} /></View>
                   )}
                 </Pressable>

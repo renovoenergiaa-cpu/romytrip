@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useTheme, type ThemeColors } from '../../src/theme';
@@ -45,7 +46,7 @@ function CommunityCard({ comm, onPress, s, colors }: { comm: any; onPress: () =>
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Abrir comunidade ${title}`} style={({ pressed }) => [s.card, pressed && s.pressed]}>
       {comm.icon_url
-        ? <Image source={{ uri: comm.icon_url }} style={s.cardTile} accessibilityIgnoresInvertColors />
+        ? <Image source={{ uri: comm.icon_url }} style={s.cardTile} cachePolicy="memory-disk" />
         : <View style={[s.cardTile, { backgroundColor: soft(color) }]}><Glyph size={26} weight="duotone" color={color} /></View>}
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <View style={s.cardTop}>

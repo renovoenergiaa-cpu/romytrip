@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '../../lib/supabase';
+import { AVATAR_MAX_SIDE, CACHE_FOREVER, shrinkImage } from '../../lib/media';
 import type { OnboardingData } from '../../store/onboardingStore';
 
 export function ageFromDob(dob: string): number | null {
@@ -23,20 +24,23 @@ const toIsoDate = (value: string) => {
 export async function uploadPhoto(userId: string, uri: string, index: number): Promise<string> {
   if (uri.startsWith('http')) return uri; // já está no Storage
 
-  const ext = (uri.split('?')[0].split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+  // A foto de perfil aparece em quase toda tela: vai reduzida (cada download conta no limite de tráfego)
+  const small = await shrinkImage(uri, AVATAR_MAX_SIDE);
+  const ext = small.changed ? 'jpg' : (uri.split('?')[0].split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
   const safeExt = ['jpg', 'jpeg', 'png', 'webp', 'heic'].includes(ext) ? ext : 'jpg';
   const fileName = `${userId}/${Date.now()}_${index}.${safeExt}`;
 
   let body: ArrayBuffer | Blob;
   if (Platform.OS === 'web') {
-    body = await (await fetch(uri)).blob();
+    body = await (await fetch(small.uri)).blob();
   } else {
-    body = decode(await FileSystem.readAsStringAsync(uri, { encoding: 'base64' }));
+    body = decode(await FileSystem.readAsStringAsync(small.uri, { encoding: 'base64' }));
   }
 
   const { error } = await supabase.storage.from('avatars').upload(fileName, body, {
     contentType: `image/${safeExt === 'jpg' ? 'jpeg' : safeExt}`,
     upsert: true,
+    cacheControl: CACHE_FOREVER,
   });
   if (error) throw error;
   return supabase.storage.from('avatars').getPublicUrl(fileName).data.publicUrl;

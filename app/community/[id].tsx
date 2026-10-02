@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Animated, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -218,7 +219,7 @@ export default function CommunityScreen() {
         {/* Capa */}
         <View style={[s.cover, { height: insets.top + COVER_H, backgroundColor: soft(color, isDark ? 0.22 : 0.16) }]}>
           {c.cover_url ? (
-            <Image source={{ uri: c.cover_url }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel={`Capa de ${title}`} />
+            <Image source={{ uri: c.cover_url }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" accessibilityLabel={`Capa de ${title}`} />
           ) : (
             <View style={s.watermark} pointerEvents="none"><Glyph size={150} weight="duotone" color={soft(color, 0.5)} /></View>
           )}
@@ -241,7 +242,7 @@ export default function CommunityScreen() {
             style={s.iconWrap}
           >
             {c.icon_url ? (
-              <Image source={{ uri: c.icon_url }} style={s.icon} />
+              <Image source={{ uri: c.icon_url }} style={s.icon} cachePolicy="memory-disk" />
             ) : (
               <View style={[s.icon, { backgroundColor: colors.card }]}>
                 <View style={[StyleSheet.absoluteFill, { backgroundColor: soft(color) }]} />

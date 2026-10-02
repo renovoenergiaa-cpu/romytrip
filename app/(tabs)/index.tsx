@@ -249,6 +249,9 @@ export default function RomyFeedScreen() {
         mediaTypes: source === 'photo' ? ['images'] : source === 'video' ? ['videos'] : ['images', 'videos'],
         allowsEditing: Platform.OS === 'ios' && source !== 'video', // no Android o recorte abre outra tela e pode reiniciar o app
         quality: 0.7,
+        // Vídeo curto e em qualidade média: cada visualização no feed conta no limite de tráfego do Supabase
+        videoMaxDuration: 30,
+        videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
       };
       const result = source === 'gallery' ? await ImagePicker.launchImageLibraryAsync(options) : await ImagePicker.launchCameraAsync(options);
       const asset = !result.canceled ? result.assets?.[0] : null;

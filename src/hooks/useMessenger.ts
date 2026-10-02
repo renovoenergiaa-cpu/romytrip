@@ -6,6 +6,7 @@ import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { sendPushNotification } from '../services/notifications';
+import { CACHE_FOREVER, shrinkImage } from '../lib/media';
 export interface ConversationLastMessage {
   text: string;
   created_at: string;
@@ -198,7 +199,9 @@ export const useMessages = (conversationId: string) => {
 };
 
 // Lê a mídia escolhida. No web o seletor devolve um blob: URL (sem extensão) e o expo-file-system não existe lá.
-async function readPickedMedia(uri: string, kind: 'image' | 'video') {
+async function readPickedMedia(picked: string, kind: 'image' | 'video') {
+  // Foto vai reduzida: cada vez que a conversa abre, ela é baixada (e conta no limite de tráfego)
+  const uri = kind === 'image' ? (await shrinkImage(picked)).uri : picked;
   const fallbackExt = kind === 'image' ? 'jpg' : 'mp4';
   if (Platform.OS === 'web') {
     const blob = await (await fetch(uri)).blob();
@@ -262,7 +265,7 @@ export const useSendMessage = () => {
         const fileName = `${userId}/audio_${Date.now()}.${fileExt}`;
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from('chat_audio')
-          .upload(fileName, fileBody, { contentType, upsert: true });
+          .upload(fileName, fileBody, { contentType, upsert: true, cacheControl: CACHE_FOREVER });
 
         // 🔒 Bucket privado: guarda só a referência; o link assinado é gerado ao exibir (useChatMedia)
         if (!uploadErr && uploadData) finalAudioUrl = `chat_audio/${uploadData.path}`;
@@ -276,7 +279,7 @@ export const useSendMessage = () => {
         // 🔒 N-05 Fix: images go to 'chat_images' bucket, not 'chat_audio'
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from('chat_images')
-          .upload(fileName, body, { contentType, upsert: true });
+          .upload(fileName, body, { contentType, upsert: true, cacheControl: CACHE_FOREVER });
 
         if (!uploadErr && uploadData) finalImageUrl = `chat_images/${uploadData.path}`;
         // Sem fallback para o URI local: ele só existe no aparelho de quem enviou
@@ -290,7 +293,7 @@ export const useSendMessage = () => {
         // 🔒 N-05 Fix: videos go to 'chat_videos' bucket, not 'chat_audio'
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from('chat_videos')
-          .upload(fileName, body, { contentType, upsert: true });
+          .upload(fileName, body, { contentType, upsert: true, cacheControl: CACHE_FOREVER });
 
         if (!uploadErr && uploadData) finalVideoUrl = `chat_videos/${uploadData.path}`;
         // Falha típica: vídeo acima do limite de 50 MB do bucket

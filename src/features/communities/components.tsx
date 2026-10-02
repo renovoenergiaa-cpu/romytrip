@@ -3,6 +3,7 @@ import {
   ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { Image as ExpoImage } from 'expo-image';
 import { useTheme, type ThemeColors } from '../../theme';
 import { Sheet } from '../../components/Sheet';
 import { Avatar } from '../onboarding/components';
@@ -52,7 +53,7 @@ export function CommunityPost({ post, canManage, busy, onAuthor, onOptions, onOp
 
       {post.media_url ? (
         <Pressable onPress={() => onOpenImage(post.media_url)} accessibilityRole="imagebutton" accessibilityLabel="Ampliar foto">
-          <Image source={{ uri: post.media_url }} style={s.photo} resizeMode="cover" />
+          <ExpoImage source={{ uri: post.media_url }} style={s.photo} contentFit="cover" cachePolicy="memory-disk" />
         </Pressable>
       ) : null}
     </View>

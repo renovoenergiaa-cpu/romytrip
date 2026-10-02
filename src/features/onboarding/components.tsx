@@ -1,5 +1,6 @@
 import { forwardRef, useMemo, useState } from 'react';
-import { Image, Platform, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { Check } from './icons';
@@ -188,7 +189,8 @@ export const BigInput = forwardRef<TextInput, TextInputProps & { invalid?: boole
 
 export function Avatar({ photo, name, size }: { photo?: string; name: string; size: number }) {
   const initial = name.trim().charAt(0).toUpperCase() || '?';
-  if (photo) return <Image source={{ uri: photo }} style={{ width: size, height: size, borderRadius: size / 2 }} />;
+  // expo-image guarda a foto no aparelho: o mesmo avatar não é baixado de novo em cada tela
+  if (photo) return <Image source={{ uri: photo }} style={{ width: size, height: size, borderRadius: size / 2 }} cachePolicy="memory-disk" transition={120} />;
   return (
     <LinearGradient
       colors={brandGradient}
