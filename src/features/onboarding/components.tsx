@@ -127,6 +127,29 @@ const chipStyles = (c: ThemeColors) => StyleSheet.create({
   textSelected: { color: c.onPrimary },
 });
 
+/* ─── Etiqueta estática (perfil) ───────────────────────────────────────────── */
+
+export function Tag({ option }: { option: Option }) {
+  const { colors } = useTheme();
+  const Icon = option.icon;
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        height: 34,
+        paddingHorizontal: 12,
+        borderRadius: 999,
+        backgroundColor: colors.surface,
+      }}
+    >
+      {Icon && <Icon size={16} weight="duotone" color={colors.primary} />}
+      <Text style={{ fontSize: 14, fontWeight: '600', color: colors.textPrimary }}>{option.label}</Text>
+    </View>
+  );
+}
+
 /* ─── Campo grande (uma pergunta = um campo) ───────────────────────────────── */
 
 export const BigInput = forwardRef<TextInput, TextInputProps & { invalid?: boolean }>(

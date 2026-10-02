@@ -45,3 +45,14 @@ export { WarningIcon as Warning } from 'phosphor-react-native/src/icons/Warning'
 export { WavesIcon as Waves } from 'phosphor-react-native/src/icons/Waves';
 export { WineIcon as Wine } from 'phosphor-react-native/src/icons/Wine';
 export { XIcon as X } from 'phosphor-react-native/src/icons/X';
+export { GearSixIcon as GearSix } from 'phosphor-react-native/src/icons/GearSix';
+export { PencilSimpleIcon as PencilSimple } from 'phosphor-react-native/src/icons/PencilSimple';
+export { QuotesIcon as Quotes } from 'phosphor-react-native/src/icons/Quotes';
+export { CompassIcon as Compass } from 'phosphor-react-native/src/icons/Compass';
+export { AirplaneTiltIcon as AirplaneTilt } from 'phosphor-react-native/src/icons/AirplaneTilt';
+export { TranslateIcon as Translate } from 'phosphor-react-native/src/icons/Translate';
+export { CrownIcon as Crown } from 'phosphor-react-native/src/icons/Crown';
+export { PlusIcon as Plus } from 'phosphor-react-native/src/icons/Plus';
+export { CalendarBlankIcon as CalendarBlank } from 'phosphor-react-native/src/icons/CalendarBlank';
+export { ImagesIcon as Images } from 'phosphor-react-native/src/icons/Images';
+export { ArrowRightIcon as ArrowRight } from 'phosphor-react-native/src/icons/ArrowRight';
