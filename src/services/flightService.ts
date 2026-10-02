@@ -4,9 +4,9 @@
  * 1. Google Flights Live Engine (Real-time live prices, flight numbers, aircraft and direct booking links)
  * 2. Duffel Flights API v2 + Duffel Links Sessions (Official NDC direct airline booking)
  * 3. SerpApi Google Flights API
- * 4. High-Fidelity Market Benchmark Fallback Engine (Real airlines, schedules and booking URLs)
  */
 
+import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 
 export interface FlightResult {
@@ -30,7 +30,7 @@ export interface FlightResult {
   googleBookingUrl?: string;
   kayakUrl?: string;
   decolarUrl?: string;
-  provider: 'google' | 'duffel' | 'serpapi' | 'benchmark';
+  provider: 'google' | 'duffel' | 'serpapi';
 }
 
 export interface FlightSearchParams {
@@ -676,216 +676,19 @@ async function searchSerpApiGoogleFlights(params: FlightSearchParams): Promise<F
 }
 
 /**
- * 4. Realistic Fallback Benchmark with REAL airlines, flights and direct purchase links
- */
-export function generateRealisticBenchmarkFlights(params: FlightSearchParams): FlightResult[] {
-  const { originCode, destCode, departureDate, returnDate, passengers = 1, cabinClass } = params;
-  const isRoundTrip = !!(returnDate && returnDate.length === 10);
-
-  const brAirports = ['GRU', 'GIG', 'SDU', 'CGH', 'FOR', 'SSA', 'REC', 'POA', 'CNF', 'BSB', 'CWB', 'MAO', 'NAT', 'FLN'];
-  const isDomestic = brAirports.includes(originCode) && brAirports.includes(destCode);
-
-  const routesBase: Record<string, number> = {
-    'GRU-GIG': 390,
-    'GRU-BSB': 460,
-    'GRU-CNF': 370,
-    'GRU-SSA': 590,
-    'GRU-REC': 690,
-    'GRU-FOR': 730,
-    'GRU-FLN': 440,
-    'GRU-POA': 480,
-    'GRU-CWB': 350,
-    'GRU-MIA': 2300,
-    'GRU-MCO': 2450,
-    'GRU-JFK': 2600,
-    'GRU-LIS': 2700,
-    'GRU-MAD': 2550,
-    'GRU-CDG': 2800,
-    'GRU-LHR': 2950,
-    'GRU-EZE': 990,
-    'GRU-SCL': 1150,
-  };
-
-  const key = `${originCode}-${destCode}`;
-  const reverseKey = `${destCode}-${originCode}`;
-  let baseOneWay = routesBase[key] || routesBase[reverseKey] || 520;
-
-  const tripMultiplier = isRoundTrip ? 2 : 1;
-  const cabinMultiplier = cabinClass === 'Econômica' ? 1 : cabinClass === 'Executiva' ? 2.6 : 4.2;
-  const unitPrice = Math.round(baseOneWay * tripMultiplier * cabinMultiplier);
-  const totalPrice = unitPrice * passengers;
-
-  const secondaryText = isRoundTrip
-    ? passengers > 1
-      ? `Total para ${passengers} passageiros • Ida e volta`
-      : 'Ida e volta • Taxas inclusas'
-    : passengers > 1
-    ? `Total para ${passengers} passageiros • Somente ida`
-    : 'Somente ida • Taxas inclusas';
-
-  if (isDomestic) {
-    return [
-      {
-        id: 'bench-g3-1',
-        airline: 'GOL Linhas Aéreas',
-        airlineLogo: getCarrierLogo('G3'),
-        price: `R$ ${totalPrice.toLocaleString('pt-BR')}`,
-        secondaryPrice: secondaryText,
-        rawPrice: totalPrice,
-        currency: 'BRL',
-        departureTime: '06:50',
-        arrivalTime: '07:55',
-        duration: '1h 05m',
-        stops: 'Direto',
-        cabinClass,
-        carrierCode: 'G3',
-        flightNumber: 'G3 1524',
-        aircraft: 'Boeing 737-800',
-        deepLink: buildDirectAirlineUrl({ carrierCode: 'G3', originCode, destCode, departureDate, returnDate, passengers }),
-        directBookingUrl: buildDirectAirlineUrl({ carrierCode: 'G3', originCode, destCode, departureDate, returnDate, passengers }),
-        googleBookingUrl: buildGoogleFlightsUrl({ originCode, destCode, departureDate, returnDate, airline: 'GOL' }),
-        kayakUrl: buildKayakUrl({ originCode, destCode, departureDate, returnDate, passengers, carrierCode: 'G3' }),
-        decolarUrl: buildDecolarUrl({ originCode, destCode, departureDate, returnDate, passengers }),
-        provider: 'benchmark',
-      },
-      {
-        id: 'bench-la-2',
-        airline: 'LATAM Airlines',
-        airlineLogo: getCarrierLogo('LA'),
-        price: `R$ ${Math.round(totalPrice * 1.03).toLocaleString('pt-BR')}`,
-        secondaryPrice: secondaryText,
-        rawPrice: Math.round(totalPrice * 1.03),
-        currency: 'BRL',
-        departureTime: '10:15',
-        arrivalTime: '11:20',
-        duration: '1h 05m',
-        stops: 'Direto',
-        cabinClass,
-        carrierCode: 'LA',
-        flightNumber: 'LA 3342',
-        aircraft: 'Airbus A320neo',
-        deepLink: buildDirectAirlineUrl({ carrierCode: 'LA', originCode, destCode, departureDate, returnDate, passengers }),
-        directBookingUrl: buildDirectAirlineUrl({ carrierCode: 'LA', originCode, destCode, departureDate, returnDate, passengers }),
-        googleBookingUrl: buildGoogleFlightsUrl({ originCode, destCode, departureDate, returnDate, airline: 'LATAM' }),
-        kayakUrl: buildKayakUrl({ originCode, destCode, departureDate, returnDate, passengers, carrierCode: 'LA' }),
-        decolarUrl: buildDecolarUrl({ originCode, destCode, departureDate, returnDate, passengers }),
-        provider: 'benchmark',
-      },
-      {
-        id: 'bench-ad-3',
-        airline: 'Azul Linhas Aéreas',
-        airlineLogo: getCarrierLogo('AD'),
-        price: `R$ ${Math.round(totalPrice * 0.98).toLocaleString('pt-BR')}`,
-        secondaryPrice: secondaryText,
-        rawPrice: Math.round(totalPrice * 0.98),
-        currency: 'BRL',
-        departureTime: '14:30',
-        arrivalTime: '15:35',
-        duration: '1h 05m',
-        stops: 'Direto',
-        cabinClass,
-        carrierCode: 'AD',
-        flightNumber: 'AD 4200',
-        aircraft: 'Embraer 195 E2',
-        deepLink: buildDirectAirlineUrl({ carrierCode: 'AD', originCode, destCode, departureDate, returnDate, passengers }),
-        directBookingUrl: buildDirectAirlineUrl({ carrierCode: 'AD', originCode, destCode, departureDate, returnDate, passengers }),
-        googleBookingUrl: buildGoogleFlightsUrl({ originCode, destCode, departureDate, returnDate, airline: 'Azul' }),
-        kayakUrl: buildKayakUrl({ originCode, destCode, departureDate, returnDate, passengers, carrierCode: 'AD' }),
-        decolarUrl: buildDecolarUrl({ originCode, destCode, departureDate, returnDate, passengers }),
-        provider: 'benchmark',
-      },
-    ];
-  }
-
-  // International routes
-  return [
-    {
-      id: 'bench-intl-1',
-      airline: 'TAP Air Portugal',
-      airlineLogo: getCarrierLogo('TP'),
-      price: `R$ ${totalPrice.toLocaleString('pt-BR')}`,
-      secondaryPrice: secondaryText,
-      rawPrice: totalPrice,
-      currency: 'BRL',
-      departureTime: '15:30',
-      arrivalTime: '05:25',
-      duration: '9h 55m',
-      stops: 'Direto',
-      cabinClass,
-      carrierCode: 'TP',
-      flightNumber: 'TP 82',
-      aircraft: 'Airbus A330-900neo',
-      deepLink: buildDirectAirlineUrl({ carrierCode: 'TP', originCode, destCode, departureDate, returnDate, passengers }),
-      directBookingUrl: buildDirectAirlineUrl({ carrierCode: 'TP', originCode, destCode, departureDate, returnDate, passengers }),
-      googleBookingUrl: buildGoogleFlightsUrl({ originCode, destCode, departureDate, returnDate, airline: 'TAP' }),
-      kayakUrl: buildKayakUrl({ originCode, destCode, departureDate, returnDate, passengers, carrierCode: 'TP' }),
-      decolarUrl: buildDecolarUrl({ originCode, destCode, departureDate, returnDate, passengers }),
-      provider: 'benchmark',
-    },
-    {
-      id: 'bench-intl-2',
-      airline: 'LATAM Airlines',
-      airlineLogo: getCarrierLogo('LA'),
-      price: `R$ ${Math.round(totalPrice * 1.05).toLocaleString('pt-BR')}`,
-      secondaryPrice: secondaryText,
-      rawPrice: Math.round(totalPrice * 1.05),
-      currency: 'BRL',
-      departureTime: '23:10',
-      arrivalTime: '07:15',
-      duration: '9h 05m',
-      stops: 'Direto',
-      cabinClass,
-      carrierCode: 'LA',
-      flightNumber: 'LA 8180',
-      aircraft: 'Boeing 777-300ER',
-      deepLink: buildDirectAirlineUrl({ carrierCode: 'LA', originCode, destCode, departureDate, returnDate, passengers }),
-      directBookingUrl: buildDirectAirlineUrl({ carrierCode: 'LA', originCode, destCode, departureDate, returnDate, passengers }),
-      googleBookingUrl: buildGoogleFlightsUrl({ originCode, destCode, departureDate, returnDate, airline: 'LATAM' }),
-      kayakUrl: buildKayakUrl({ originCode, destCode, departureDate, returnDate, passengers, carrierCode: 'LA' }),
-      decolarUrl: buildDecolarUrl({ originCode, destCode, departureDate, returnDate, passengers }),
-      provider: 'benchmark',
-    },
-    {
-      id: 'bench-intl-3',
-      airline: 'American Airlines',
-      airlineLogo: getCarrierLogo('AA'),
-      price: `R$ ${Math.round(totalPrice * 1.08).toLocaleString('pt-BR')}`,
-      secondaryPrice: secondaryText,
-      rawPrice: Math.round(totalPrice * 1.08),
-      currency: 'BRL',
-      departureTime: '21:30',
-      arrivalTime: '05:40',
-      duration: '9h 10m',
-      stops: 'Direto',
-      cabinClass,
-      carrierCode: 'AA',
-      flightNumber: 'AA 930',
-      aircraft: 'Boeing 777-200',
-      deepLink: buildDirectAirlineUrl({ carrierCode: 'AA', originCode, destCode, departureDate, returnDate, passengers }),
-      directBookingUrl: buildDirectAirlineUrl({ carrierCode: 'AA', originCode, destCode, departureDate, returnDate, passengers }),
-      googleBookingUrl: buildGoogleFlightsUrl({ originCode, destCode, departureDate, returnDate, airline: 'American Airlines' }),
-      kayakUrl: buildKayakUrl({ originCode, destCode, departureDate, returnDate, passengers, carrierCode: 'AA' }),
-      decolarUrl: buildDecolarUrl({ originCode, destCode, departureDate, returnDate, passengers }),
-      provider: 'benchmark',
-    },
-  ];
-}
-
-/**
  * Main Flight Search Orchestrator
  * Priority 1: Google Flights Live Engine (Real-time live prices, flight numbers, aircraft & direct booking tokens)
  * Priority 2: Duffel API (Official NDC - filtering out test airlines)
  * Priority 3: SerpApi Google Flights API
- * Priority 4: High-Fidelity Market Benchmark with real airlines and direct booking links
  */
 export async function searchRealFlights(params: FlightSearchParams): Promise<{
   flights: FlightResult[];
   isLive: boolean;
-  provider: 'google' | 'duffel' | 'serpapi' | 'benchmark';
+  provider: 'google' | 'duffel' | 'serpapi' | 'none';
 }> {
-  // 1. Try Google Flights Live Engine (Native & direct)
+  // 1. Google Flights direto (só no celular: o navegador bloqueia a consulta por CORS)
   try {
-    const gfResults = await searchGoogleFlightsLive(params);
+    const gfResults = Platform.OS === 'web' ? [] : await searchGoogleFlightsLive(params);
     if (gfResults && gfResults.length > 0) {
       return { flights: gfResults, isLive: true, provider: 'google' };
     }
@@ -909,7 +712,6 @@ export async function searchRealFlights(params: FlightSearchParams): Promise<{
     }
   } catch (_) {}
 
-  // 4. Fallback to high-fidelity realistic benchmark with real airlines and booking links
-  const benchmarkFlights = generateRealisticBenchmarkFlights(params);
-  return { flights: benchmarkFlights, isLive: false, provider: 'benchmark' };
+  // Sem oferta real: lista vazia (a tela oferece os links de busca nos sites, nunca preço inventado)
+  return { flights: [], isLive: false, provider: 'none' };
 }
