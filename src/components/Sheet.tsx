@@ -3,6 +3,7 @@ import { Animated, Easing, KeyboardAvoidingView, Modal, Platform, Pressable, Sty
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, type ThemeColors } from '../theme';
 import { X } from '../features/onboarding/icons';
+import { modalKeyboardBehavior } from '../lib/keyboard';
 
 /** Folha que sobe de baixo (opções, nova conversa, comentários). Fecha tocando no fundo ou no X. */
 export function Sheet({ visible, onClose, title, children, fill = false }: {
@@ -33,7 +34,7 @@ export function Sheet({ visible, onClose, title, children, fill = false }: {
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
       <Animated.View style={[s.overlay, { opacity: enter }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Fechar" />
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.keyboard} pointerEvents="box-none">
+        <KeyboardAvoidingView behavior={modalKeyboardBehavior} style={s.keyboard} pointerEvents="box-none">
         <Animated.View
           style={[
             s.card,
@@ -60,7 +61,8 @@ const sheetStyles = (c: ThemeColors) => StyleSheet.create({
   overlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-end' },
   keyboard: { flex: 1, justifyContent: 'flex-end' },
   card: {
-    width: '100%', maxWidth: 560, alignSelf: 'center', maxHeight: '80%',
+    // flexShrink: com o teclado aberto, a folha encolhe em vez de passar do topo da tela
+    width: '100%', maxWidth: 560, alignSelf: 'center', maxHeight: '80%', flexShrink: 1,
     borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 10,
     backgroundColor: c.card,
   },

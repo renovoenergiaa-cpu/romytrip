@@ -4,8 +4,9 @@ import {
   Text, 
   StyleSheet, 
   TouchableOpacity, 
-  ScrollView, 
-  Modal, 
+  ScrollView,
+  Modal,
+  KeyboardAvoidingView,
   TextInput, 
   Alert, 
   ActivityIndicator, 
@@ -14,6 +15,7 @@ import {
   StatusBar 
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { modalKeyboardBehavior } from '../src/lib/keyboard';
 import { 
   ChevronLeft, 
   HelpCircle, 
@@ -176,7 +178,7 @@ export default function HelpSupportScreen() {
 
       {/* Contact Support Modal */}
       <Modal visible={contactModalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={modalKeyboardBehavior}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Enviar Mensagem</Text>
@@ -223,7 +225,7 @@ export default function HelpSupportScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  ActivityIndicator, DeviceEventEmitter, Image, KeyboardAvoidingView, Modal, Platform, Pressable,
+  ActivityIndicator, DeviceEventEmitter, Image, KeyboardAvoidingView, Modal, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../src/lib/supabase';
+import { modalKeyboardBehavior } from '../../src/lib/keyboard';
 import { useTheme, type ThemeColors } from '../../src/theme';
 import { SkeletonLine } from '../../src/components/SkeletonLoader';
 import { useDeleteFeedPost, useUpdatePostCaption } from '../../src/hooks/useFeed';
@@ -442,7 +443,7 @@ export default function ProfileScreen() {
 
       {/* Editar legenda */}
       <Modal visible={!!editingPost} animationType="fade" transparent onRequestClose={() => setEditingPost(null)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
+        <KeyboardAvoidingView behavior={modalKeyboardBehavior} style={s.modalOverlay}>
           <View style={s.modalCard}>
             <View style={s.modalHeader}>
               <Text style={s.modalTitle}>Editar legenda</Text>

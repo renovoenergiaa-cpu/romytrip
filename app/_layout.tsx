@@ -2,7 +2,7 @@ import { Stack, useRouter } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, Component } from 'react';
 import { AuthProvider } from '../src/context/AuthContext';
-import { View, Text, ScrollView } from 'react-native';
+import { KeyboardAvoidingView, Platform, View, Text, ScrollView } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useTheme } from '../src/theme';
 import { GlobalNotificationProvider } from '../src/context/GlobalNotificationContext';
@@ -61,12 +61,14 @@ function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    // Android de ponta a ponta não encolhe a janela com o teclado (ver src/lib/keyboard.ts):
+    // aqui o app inteiro encolhe, como antes. No iPhone cada tela já compensa sozinha.
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" enabled={Platform.OS === 'android'}>
       {children}
       {/* Global banners float on top of every screen */}
       <IncomingCallBanner onNavigate={handleNavigateToChat} />
       <InAppMessageBanner onNavigate={handleNavigateToChat} />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

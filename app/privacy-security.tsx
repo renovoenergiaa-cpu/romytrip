@@ -5,8 +5,9 @@ import {
   StyleSheet, 
   TouchableOpacity, 
   ScrollView, 
-  Switch, 
-  Modal, 
+  Switch,
+  Modal,
+  KeyboardAvoidingView,
   TextInput, 
   Alert, 
   ActivityIndicator, 
@@ -17,6 +18,7 @@ import {
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Shield, Eye, MapPin, Key, Smartphone, CheckCircle, X } from 'lucide-react-native';
 import { supabase } from '../src/lib/supabase';
+import { modalKeyboardBehavior } from '../src/lib/keyboard';
 import { spacing, typography, useTheme } from '../src/theme';
 
 // Default privacy settings (most permissive = safe default for UX)
@@ -219,7 +221,7 @@ export default function PrivacySecurityScreen() {
 
       {/* Password Modal */}
       <Modal visible={passwordModalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={modalKeyboardBehavior}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Alterar Senha</Text>
@@ -262,7 +264,7 @@ export default function PrivacySecurityScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
