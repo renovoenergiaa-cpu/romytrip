@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, MapPin, BadgeCheck, Sparkles, UserX } from 'lucide-react-native';
@@ -83,7 +83,8 @@ export default function PublicProfileScreen() {
       startConversation(id as string, {
         onSuccess: (conversationId) => {
           router.push({ pathname: '/chat/[id]', params: { id: conversationId, name: profile.name, recipientId: id as string } });
-        }
+        },
+        onError: (err) => Alert.alert('Não foi possível iniciar a conversa', err.message),
       });
     }
   };

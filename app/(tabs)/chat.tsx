@@ -32,7 +32,8 @@ export default function ChatScreen() {
       onSuccess: (conversationId) => {
         setModalVisible(false);
         router.push({ pathname: '/chat/[id]', params: { id: conversationId, name, recipientId: targetUserId } });
-      }
+      },
+      onError: (err) => Alert.alert('Não foi possível iniciar a conversa', err.message),
     });
   };
 

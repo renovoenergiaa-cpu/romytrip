@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { supabaseUrl, supabaseAnonKey } from '../lib/supabase';
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { sendPushNotification } from '../services/notifications';
@@ -209,83 +210,67 @@ export const useSendMessage = () => {
       let finalVideoUrl = null;
 
       if (audioUri) {
-        const fileExt = audioUri.split('.').pop() || 'm4a';
-        const fileName = `${userId}/audio_${Date.now()}.${fileExt}`;
-        const base64File = await FileSystem.readAsStringAsync(audioUri, { encoding: 'base64' });
+        let fileBody: ArrayBuffer;
+        let fileExt: string;
+        let contentType: string;
 
+        if (Platform.OS === 'web') {
+          // No web o gravador devolve um blob: URL (webm no Chrome, mp4 no Safari); expo-file-system não existe lá
+          const blob = await (await fetch(audioUri)).blob();
+          contentType = (blob.type || 'audio/webm').split(';')[0];
+          fileExt = contentType.includes('mp4') ? 'm4a' : 'webm';
+          fileBody = await blob.arrayBuffer();
+        } else {
+          fileExt = audioUri.split('.').pop() || 'm4a';
+          // .m4a é AAC em MP4: o MIME padrão é audio/mp4 (audio/m4a não é reconhecido pelos navegadores)
+          contentType = fileExt === 'm4a' ? 'audio/mp4' : `audio/${fileExt}`;
+          fileBody = decode(await FileSystem.readAsStringAsync(audioUri, { encoding: 'base64' }));
+        }
+
+        const fileName = `${userId}/audio_${Date.now()}.${fileExt}`;
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from('chat_audio')
-          .upload(fileName, decode(base64File), { contentType: `audio/${fileExt}`, upsert: true });
+          .upload(fileName, fileBody, { contentType, upsert: true });
 
-        if (!uploadErr && uploadData) {
-          // 🔒 N-06 Fix: chat_audio is a private bucket — use signed URL, not public URL
-          const { data: signedData } = await supabase.storage
-            .from('chat_audio')
-            .createSignedUrl(uploadData.path, 3600); // 1 hour expiry
-          finalAudioUrl = signedData?.signedUrl || audioUri;
-        } else {
-          finalAudioUrl = audioUri;
-        }
+        // 🔒 Bucket privado: guarda só a referência; o link assinado é gerado ao exibir (useChatMedia)
+        if (!uploadErr && uploadData) finalAudioUrl = `chat_audio/${uploadData.path}`;
+        if (!finalAudioUrl) throw new Error('Não foi possível enviar o áudio. Tente novamente.');
       }
 
       if (imageUri) {
-        try {
-          // Strip query params from URI before extracting extension (iOS URIs can have ?token=...)
-          const cleanImageUri = imageUri.split('?')[0];
-          const rawExt = cleanImageUri.split('.').pop() || 'jpg';
-          const fileExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-          const fileName = `${userId}/img_${Date.now()}.${fileExt}`;
-          const base64File = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' });
-          const contentType = fileExt === 'png' ? 'image/png' : 'image/jpeg';
+        // Strip query params from URI before extracting extension (iOS URIs can have ?token=...)
+        const cleanImageUri = imageUri.split('?')[0];
+        const rawExt = cleanImageUri.split('.').pop() || 'jpg';
+        const fileExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+        const fileName = `${userId}/img_${Date.now()}.${fileExt}`;
+        const base64File = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' });
+        const contentType = fileExt === 'png' ? 'image/png' : 'image/jpeg';
 
-          // 🔒 N-05 Fix: images go to 'chat_images' bucket, not 'chat_audio'
-          const { data: uploadData, error: uploadErr } = await supabase.storage
-            .from('chat_images')
-            .upload(fileName, decode(base64File), { contentType, upsert: true });
+        // 🔒 N-05 Fix: images go to 'chat_images' bucket, not 'chat_audio'
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('chat_images')
+          .upload(fileName, decode(base64File), { contentType, upsert: true });
 
-          if (!uploadErr && uploadData) {
-            // 🔒 N-06 Fix: use signed URL for private bucket
-            const { data: signedData } = await supabase.storage
-              .from('chat_images')
-              .createSignedUrl(uploadData.path, 3600);
-            finalImageUrl = signedData?.signedUrl || imageUri;
-          } else {
-            console.log('[IMAGE UPLOAD] Failed:', uploadErr?.message);
-            finalImageUrl = imageUri;
-          }
-        } catch (err) {
-          console.log('[IMAGE UPLOAD] Exception:', err);
-          finalImageUrl = imageUri;
-        }
+        if (!uploadErr && uploadData) finalImageUrl = `chat_images/${uploadData.path}`;
+        // Sem fallback para o URI local: ele só existe no aparelho de quem enviou
+        if (!finalImageUrl) throw new Error('Não foi possível enviar a foto. Tente novamente.');
       }
 
       if (videoUri) {
-        try {
-          const cleanVideoUri = videoUri.split('?')[0];
-          const rawExt = cleanVideoUri.split('.').pop() || 'mp4';
-          const fileExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
-          const fileName = `${userId}/vid_${Date.now()}.${fileExt}`;
-          const base64File = await FileSystem.readAsStringAsync(videoUri, { encoding: 'base64' });
+        const cleanVideoUri = videoUri.split('?')[0];
+        const rawExt = cleanVideoUri.split('.').pop() || 'mp4';
+        const fileExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
+        const fileName = `${userId}/vid_${Date.now()}.${fileExt}`;
+        const base64File = await FileSystem.readAsStringAsync(videoUri, { encoding: 'base64' });
 
-          // 🔒 N-05 Fix: videos go to 'chat_videos' bucket, not 'chat_audio'
-          const { data: uploadData, error: uploadErr } = await supabase.storage
-            .from('chat_videos')
-            .upload(fileName, decode(base64File), { contentType: 'video/mp4', upsert: true });
+        // 🔒 N-05 Fix: videos go to 'chat_videos' bucket, not 'chat_audio'
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('chat_videos')
+          .upload(fileName, decode(base64File), { contentType: 'video/mp4', upsert: true });
 
-          if (!uploadErr && uploadData) {
-            // 🔒 N-06 Fix: use signed URL for private bucket
-            const { data: signedData } = await supabase.storage
-              .from('chat_videos')
-              .createSignedUrl(uploadData.path, 3600);
-            finalVideoUrl = signedData?.signedUrl || videoUri;
-          } else {
-            console.log('[VIDEO UPLOAD] Failed:', uploadErr?.message);
-            finalVideoUrl = videoUri;
-          }
-        } catch (err) {
-          console.log('[VIDEO UPLOAD] Exception:', err);
-          finalVideoUrl = videoUri;
-        }
+        if (!uploadErr && uploadData) finalVideoUrl = `chat_videos/${uploadData.path}`;
+        // Falha típica: vídeo acima do limite de 50 MB do bucket
+        if (!finalVideoUrl) throw new Error('Não foi possível enviar o vídeo (limite: 60 s / 50 MB). Tente novamente.');
       }
 
       let defaultText = text;
@@ -361,83 +346,14 @@ export const useSendMessage = () => {
 
 export const useStartConversation = () => {
   return useMutation({
-    mutationFn: async (targetUserId: string) => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('Not authenticated');
-        const userId = user.id;
-
-        // 1. Check existing shared conversations
-        const { data: existingConvs, error: checkErr } = await supabase
-          .from('conversation_participants')
-          .select('conversation_id')
-          .eq('user_id', userId);
-          
-        if (checkErr) throw checkErr;
-        
-        if (existingConvs && existingConvs.length > 0) {
-          const convIds = existingConvs.map(c => c.conversation_id);
-          
-          const { data: targetConvs, error: targetCheckErr } = await supabase
-            .from('conversation_participants')
-            .select('conversation_id')
-            .eq('user_id', targetUserId)
-            .in('conversation_id', convIds);
-            
-          if (targetCheckErr) throw targetCheckErr;
-          
-          if (targetConvs && targetConvs.length > 0) {
-            const sharedConvIds = targetConvs.map(c => c.conversation_id);
-            
-            // Check if any of these shared conversations is a 1-on-1 (is_group = false)
-            const { data: sharedConvsDetails, error: sharedConvsErr } = await supabase
-              .from('conversations')
-              .select('id')
-              .in('id', sharedConvIds)
-              .eq('is_group', false);
-              
-            if (sharedConvsErr) throw sharedConvsErr;
-            
-            if (sharedConvsDetails && sharedConvsDetails.length > 0) {
-              return sharedConvsDetails[0].id;
-            }
-          }
-        }
-
-        // 🔒 N-07 Fix: Use crypto-secure UUID instead of Math.random()-based generator
-        // Math.random() is NOT cryptographically secure and can be predictable.
-        const generateSecureUUID = (): string => {
-          const bytes = new Uint8Array(16);
-          crypto.getRandomValues(bytes);
-          bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
-          bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant
-          const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-          return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
-        };
-        const convId = generateSecureUUID();
-
-        // 3. Create the conversation
-        const { error: createErr } = await supabase
-          .from('conversations')
-          .insert({ id: convId, is_group: false });
-          
-        if (createErr) throw createErr;
-        
-        // 4. Add participants
-        const { error: partErr } = await supabase
-          .from('conversation_participants')
-          .insert([
-            { conversation_id: convId, user_id: userId },
-            { conversation_id: convId, user_id: targetUserId }
-          ]);
-          
-        if (partErr) throw partErr;
-        
-        return convId;
-      } catch (err) {
-        console.error("Error in useStartConversation:", err);
-        throw err;
-      }
+    mutationFn: async (targetUserId: string): Promise<string> => {
+      // Função no banco (SECURITY DEFINER): reaproveita a conversa 1-a-1 existente ou
+      // cria conversa + participantes de forma atômica, respeitando allowDirectMessages.
+      const { data, error } = await supabase.rpc('start_direct_conversation', {
+        target_user_id: targetUserId,
+      });
+      if (error) throw error;
+      return data as string;
     }
   });
 };

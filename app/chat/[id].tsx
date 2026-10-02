@@ -56,6 +56,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../../src/lib/supabase';
+import { resolveChatMediaUrl, useChatMediaUrl } from '../../src/hooks/useChatMedia';
 import { sendPushNotification } from '../../src/services/notifications';
 import { spacing, typography, useTheme } from '../../src/theme';
 import { 
@@ -73,7 +74,8 @@ import {
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const ChatVideoItem = ({ uri }: { uri: string }) => {
-  const player = useVideoPlayer(uri, (p) => {
+  const { data: signedUri } = useChatMediaUrl(uri);
+  const player = useVideoPlayer(signedUri ?? null, (p) => {
     p.loop = false;
   });
   return (
@@ -83,6 +85,21 @@ const ChatVideoItem = ({ uri }: { uri: string }) => {
       nativeControls={true}
       contentFit="contain"
     />
+  );
+};
+
+const ChatImageItem = ({ uri, onOpen, style }: { uri: string; onOpen: (signedUri: string) => void; style: any }) => {
+  const { data: signedUri } = useChatMediaUrl(uri);
+  return (
+    <TouchableOpacity onPress={() => signedUri && onOpen(signedUri)} activeOpacity={0.9}>
+      {signedUri ? (
+        <Image source={{ uri: signedUri }} style={style} resizeMode="cover" />
+      ) : (
+        <View style={[style, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator />
+        </View>
+      )}
+    </TouchableOpacity>
   );
 };
 
@@ -107,13 +124,16 @@ const AudioPlayer = ({ url, isSender }: { url: string; isSender: boolean }) => {
           setIsPlaying(true);
         }
       } else {
-        const newPlayer = createAudioPlayer({ uri: url });
+        // Gera o link assinado na hora (o salvo na mensagem pode ter expirado)
+        const src = await resolveChatMediaUrl(url);
+        const newPlayer = createAudioPlayer({ uri: src });
         newPlayer.play();
         setPlayer(newPlayer);
         setIsPlaying(true);
       }
     } catch (err) {
       console.error('Error playing sound:', err);
+      Alert.alert('Áudio indisponível', 'Não foi possível reproduzir este áudio.');
     }
   };
 
@@ -161,6 +181,8 @@ export default function ChatDetailScreen() {
   const [recording, setRecording] = useState<AudioRecorder | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const MAX_AUDIO_SECONDS = 120;
+  const MAX_VIDEO_SECONDS = 60;
   const scrollViewRef = useRef<ScrollView>(null);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -839,6 +861,9 @@ export default function ChatDetailScreen() {
     setFacing((prev) => (prev === 'front' ? 'back' : 'front'));
   };
 
+  const { data: messages, isLoading } = useMessages(id as string);
+  const { mutate: sendMessage, isPending: isSending } = useSendMessage();
+
   const startRecording = async () => {
     try {
       const permission = await requestRecordingPermissionsAsync();
@@ -906,8 +931,12 @@ export default function ChatDetailScreen() {
     }
   };
 
-  const { data: messages, isLoading } = useMessages(id as string);
-  const { mutate: sendMessage, isPending: isSending } = useSendMessage();
+  // Ao atingir o limite, para e envia o áudio automaticamente
+  useEffect(() => {
+    if (!isRecording) return;
+    const timeout = setTimeout(() => sendRecording(), MAX_AUDIO_SECONDS * 1000);
+    return () => clearTimeout(timeout);
+  }, [isRecording]);
 
   const handleSendText = () => {
     if (messageText.trim() === '') return;
@@ -933,6 +962,11 @@ export default function ChatDetailScreen() {
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
         if (asset.type === 'video') {
+          // duration vem em milissegundos (pode ser null no web; aí o limite de tamanho do servidor vale)
+          if (asset.duration && asset.duration > MAX_VIDEO_SECONDS * 1000) {
+            Alert.alert('Vídeo muito longo', `Envie vídeos de até ${MAX_VIDEO_SECONDS} segundos.`);
+            return;
+          }
           sendMessage({ conversationId: id as string, text: '', videoUri: asset.uri }, {
             onSuccess: () => {
               setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
@@ -964,14 +998,19 @@ export default function ChatDetailScreen() {
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images', 'videos'],
         quality: 0.8,
+        videoMaxDuration: MAX_VIDEO_SECONDS,
       });
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
         if (asset.type === 'video') {
-          sendMessage({ conversationId: id as string, text: '', videoUri: asset.uri });
+          sendMessage({ conversationId: id as string, text: '', videoUri: asset.uri }, {
+            onError: (err) => Alert.alert('Erro ao enviar vídeo', err.message),
+          });
         } else {
-          sendMessage({ conversationId: id as string, text: '', imageUri: asset.uri });
+          sendMessage({ conversationId: id as string, text: '', imageUri: asset.uri }, {
+            onError: (err) => Alert.alert('Erro ao enviar foto', err.message),
+          });
         }
       }
     } catch (err) {
@@ -1155,18 +1194,14 @@ export default function ChatDetailScreen() {
                   {msg.audio_url ? (
                     <AudioPlayer url={msg.audio_url} isSender={isSender} />
                   ) : msg.image_url ? (
-                    <TouchableOpacity onPress={() => setSelectedImage(msg.image_url)} activeOpacity={0.9}>
-                      <Image 
-                        source={{ uri: msg.image_url }} 
-                        style={styles.chatImage} 
-                        resizeMode="cover" 
-                      />
+                    <View>
+                      <ChatImageItem uri={msg.image_url} onOpen={setSelectedImage} style={styles.chatImage} />
                       {msg.text && msg.text !== '[Foto]' && (
                         <Text style={[isSender ? styles.messageTextSender : styles.messageTextReceiver, { marginTop: 6 }]}>
                           {msg.text}
                         </Text>
                       )}
-                    </TouchableOpacity>
+                    </View>
                   ) : msg.video_url ? (
                     <View style={styles.chatVideoContainer}>
                       <ChatVideoItem uri={msg.video_url} />
@@ -1234,7 +1269,7 @@ export default function ChatDetailScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#EF4444', marginRight: 8, opacity: recordingDuration % 2 === 0 ? 1 : 0.5 }} />
                   <Text style={{ ...typography.body, color: colors.textPrimary }}>
-                    {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+                    {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')} / {MAX_AUDIO_SECONDS / 60}:00
                   </Text>
                 </View>
                 
@@ -1548,6 +1583,7 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   textInput: {
     flex: 1,
+    minWidth: 0, // no web o <input> tem largura mínima própria e empurra os botões para fora da tela
     backgroundColor: colors.surface,
     borderRadius: 20,
     paddingHorizontal: spacing.md,
@@ -1562,6 +1598,7 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    flexShrink: 0,
   },
   micButton: {
     backgroundColor: colors.primary,
@@ -1570,6 +1607,7 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    flexShrink: 0,
   },
   settingsOverlay: {
     flex: 1,
