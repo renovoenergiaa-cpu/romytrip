@@ -1,723 +1,212 @@
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Alert,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
-import {
-  Search,
-  Plus,
-  Clock,
-  MapPin,
-  Calendar,
-  Users,
-  CalendarDays,
-  DollarSign,
-  Lock,
-  Trash2,
-  Edit3,
-  Globe,
-  ChevronRight,
-  Sparkles,
-} from 'lucide-react-native';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { colors, spacing, typography, useTheme } from '../../src/theme';
+import { useTheme, type ThemeColors } from '../../src/theme';
 import { useMyEvents, useDeleteEvent } from '../../src/hooks/useEvents';
 import { useCommunities, useMyCommunities } from '../../src/hooks/useCommunities';
 import EditEventModal from '../../src/components/EditEventModal';
 import CreateCommunityModal from '../../src/components/CreateCommunityModal';
-import { AVAILABLE_EVENT_ICONS } from '../../src/components/CreateEventModal';
+import { confirmAction, showError } from '../../src/lib/dialogs';
+import { eventIcon } from '../../src/features/events/eventIcons';
+import { ChatEmpty, FilterChip, SearchField } from '../../src/features/chat/components';
+import {
+  CalendarBlank, Clock, Globe, LockSimple, MapPin, PencilSimple, Plus, Trash, Users, UsersThree, WifiSlash, type Icon,
+} from '../../src/features/onboarding/icons';
 
-// ─── Design tokens (same as profile) ────────────────────────────────────────
-const BG       = '#0A0A0C';
-const CARD     = '#141416';
-const BORDER   = '#222226';
-const MUTED    = '#A1A1AA';
-const PRIMARY  = '#6338FA';
-const PRIMARY_DIM = 'rgba(99,56,250,0.15)';
+type Tab = 'minhas' | 'descobrir' | 'eventos';
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'minhas', label: 'Minhas' },
+  { id: 'descobrir', label: 'Descobrir' },
+  { id: 'eventos', label: 'Meus eventos' },
+];
 
-// ─── Type badge colours ──────────────────────────────────────────────────────
-const TYPE_COLORS: Record<string, { text: string; bg: string; icon: string }> = {
-  'Temporária':    { text: '#C084FC', bg: 'rgba(192,132,252,0.12)', icon: '#C084FC' },
-  'Internacional': { text: '#60A5FA', bg: 'rgba(96,165,250,0.12)',  icon: '#60A5FA' },
-  'Privada':       { text: '#FBBF24', bg: 'rgba(251,191,36,0.12)',  icon: '#FBBF24' },
-  default:         { text: '#34D399', bg: 'rgba(52,211,153,0.12)',  icon: '#34D399' },
+// O valor de `type` é gravado no banco: NÃO alterar os nomes
+const typeLook = (c: ThemeColors, type?: string): { color: string; Glyph: Icon } => {
+  if (type === 'Temporária') return { color: c.accent, Glyph: Clock };
+  if (type === 'Internacional') return { color: c.info, Glyph: Globe };
+  if (type === 'Privada') return { color: c.warning, Glyph: LockSimple };
+  return { color: c.success, Glyph: Users };
 };
 
-function typeColors(type?: string) {
-  return TYPE_COLORS[type ?? ''] ?? TYPE_COLORS.default;
-}
+// "#RRGGBB" -> fundo suave da mesma cor
+const soft = (hex: string, alpha = 0.14) => {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+};
 
-function typeIcon(type?: string, size = 13, col = '#34D399') {
-  switch (type) {
-    case 'Temporária':    return <Clock    size={size} color={col} />;
-    case 'Internacional': return <Globe    size={size} color={col} />;
-    case 'Privada':       return <Lock     size={size} color={col} />;
-    default:              return <Users    size={size} color={col} />;
-  }
-}
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-// ─── Community Card ──────────────────────────────────────────────────────────
-function CommunityCard({ comm, onPress }: { comm: any; onPress: () => void }) {
-  const { colors, isDark } = useTheme();
-  const s = getStyles(colors, isDark);
-  const MUTED = isDark ? '#A1A1AA' : colors.textSecondary;
-  const tc = typeColors(comm.type);
-  const members = comm.community_members?.[0]?.count ?? 1;
-  const posts   = comm.community_posts?.[0]?.count   ?? 0;
+const timeOf = (iso: string) => {
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+};
+const dateOf = (iso: string) => {
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }).replace('.', '');
+};
+
+function CommunityCard({ comm, onPress, s, colors }: { comm: any; onPress: () => void; s: ReturnType<typeof getStyles>; colors: ThemeColors }) {
+  const { color, Glyph } = typeLook(colors, comm.type);
+  // Só mostra o que veio do banco (nada de "1 membro" inventado)
+  const members = comm.community_members?.[0]?.count;
+  const posts = comm.community_posts?.[0]?.count;
+  const meta = [
+    typeof members === 'number' ? plural(members, 'membro', 'membros') : null,
+    typeof posts === 'number' ? plural(posts, 'publicação', 'publicações') : null,
+  ].filter(Boolean).join(' · ');
 
   return (
-    <TouchableOpacity style={s.card} onPress={onPress} activeOpacity={0.78}>
-      {/* Type badge row */}
-      <View style={[s.cardTypeBadge, { backgroundColor: tc.bg }]}>
-        {typeIcon(comm.type, 12, tc.icon)}
-        <Text style={[s.cardTypeBadgeText, { color: tc.text }]}>{comm.type ?? 'Comunidade'}</Text>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Abrir comunidade ${comm.title}`} style={({ pressed }) => [s.card, pressed && s.pressed]}>
+      <View style={[s.cardTile, { backgroundColor: soft(color) }]}><Glyph size={26} weight="duotone" color={color} /></View>
+      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+        <View style={s.cardTop}>
+          <Text style={s.cardTitle} numberOfLines={1}>{comm.title}</Text>
+          <View style={[s.tag, { backgroundColor: soft(color) }]}><Text style={[s.tagText, { color }]}>{comm.type ?? 'Comunidade'}</Text></View>
+        </View>
+        {comm.description ? <Text style={s.cardDesc} numberOfLines={2}>{comm.description}</Text> : null}
+        {comm.location ? (
+          <View style={s.meta}><MapPin size={14} weight="fill" color={colors.textMuted} /><Text style={s.metaText} numberOfLines={1}>{comm.location}</Text></View>
+        ) : null}
+        {meta ? <Text style={s.metaText}>{meta}</Text> : null}
       </View>
-
-      <Text style={s.cardTitle} numberOfLines={2}>{comm.title}</Text>
-
-      {comm.description ? (
-        <Text style={s.cardDesc} numberOfLines={2}>{comm.description}</Text>
-      ) : null}
-
-      {comm.location ? (
-        <View style={s.cardMeta}>
-          <MapPin size={11} color={MUTED} />
-          <Text style={s.cardMetaText}>{comm.location}</Text>
-        </View>
-      ) : null}
-
-      <View style={s.cardFooter}>
-        <View style={s.cardStat}>
-          <Users size={12} color={MUTED} />
-          <Text style={s.cardStatText}>{members} membros</Text>
-        </View>
-        <View style={s.cardStat}>
-          <CalendarDays size={12} color={MUTED} />
-          <Text style={s.cardStatText}>{posts} posts</Text>
-        </View>
-        <ChevronRight size={14} color={MUTED} style={{ marginLeft: 'auto' }} />
-      </View>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
-// ─── Screen ──────────────────────────────────────────────────────────────────
 export default function CommunitiesScreen() {
   const router = useRouter();
-  const { colors, isDark } = useTheme();
-  const s = getStyles(colors, isDark);
-  const MUTED = isDark ? '#A1A1AA' : colors.textSecondary;
-  const [activeTab, setActiveTab]         = useState<'minhas' | 'descobrir' | 'eventos'>('minhas');
-  const [editingEvent, setEditingEvent]   = useState<any>(null);
-  const [searchQuery, setSearchQuery]     = useState('');
-  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const { colors } = useTheme();
+  const s = useMemo(() => getStyles(colors), [colors]);
 
-  const { data: myEvents,      isLoading: isLoadingEvents } = useMyEvents();
-  const { mutate: deleteEvent }                              = useDeleteEvent();
-  const { data: myCommunities, isLoading: isLoadingMy  }   = useMyCommunities();
-  const { data: allCommunities,isLoading: isLoadingAll }   = useCommunities();
+  const [tab, setTab] = useState<Tab>('minhas');
+  const [query, setQuery] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<any>(null);
 
-  const handleDeleteEvent = (eventId: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert('Excluir Evento', 'Tem certeza que deseja excluir este evento?', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Excluir',  style: 'destructive', onPress: () => deleteEvent({ eventId }) },
-    ]);
+  const mine = useMyCommunities();
+  const all = useCommunities();
+  const events = useMyEvents();
+  const { mutate: deleteEvent } = useDeleteEvent();
+
+  const needle = query.trim().toLowerCase();
+  const matches = (c: any) => !needle || String(c.title ?? '').toLowerCase().includes(needle);
+  const myList = (mine.data ?? []).filter(matches);
+  const allList = (all.data ?? []).filter(matches);
+
+  const handleDelete = async (event: any) => {
+    const ok = await confirmAction({ title: 'Excluir evento?', message: `"${event.title}" some do mapa e quem pediu para entrar deixa de vê-lo.`, confirmLabel: 'Excluir', destructive: true });
+    if (!ok) return;
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    deleteEvent({ eventId: event.id }, { onError: () => showError('Não foi possível excluir', 'Tente de novo em instantes.') });
   };
 
-  const formatTime = (iso: string) =>
-    new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const formatDate = (iso: string) =>
-    new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
-
-  const filteredMy  = (myCommunities  ?? []).filter((c: any) =>
-    c.title.toLowerCase().includes(searchQuery.toLowerCase()));
-  const filteredAll = (allCommunities ?? []).filter((c: any) =>
-    c.title.toLowerCase().includes(searchQuery.toLowerCase()));
-
-  const TABS: { key: 'minhas' | 'descobrir' | 'eventos'; label: string }[] = [
-    { key: 'minhas',    label: 'Minhas'   },
-    { key: 'descobrir', label: 'Descobrir'},
-    { key: 'eventos',   label: 'Eventos'  },
-  ];
+  const renderState = (q: typeof mine, list: any[], empty: React.ReactNode) => {
+    if (q.isLoading) return <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} accessibilityLabel="Carregando" />;
+    if (q.isError && !q.data) {
+      return <ChatEmpty icon={WifiSlash} title="Não conseguimos carregar" text="Confira sua internet e tente de novo." action="Tentar de novo" onAction={() => q.refetch()} secondary />;
+    }
+    if (list.length === 0) return needle ? <ChatEmpty icon={UsersThree} title="Nada encontrado" text={`Nenhuma comunidade com “${query.trim()}”.`} action="Limpar busca" onAction={() => setQuery('')} secondary /> : empty;
+    return <View style={{ gap: 12 }}>{list.map((c: any) => <CommunityCard key={c.id} comm={c} s={s} colors={colors} onPress={() => router.push(`/community/${c.id}`)} />)}</View>;
+  };
 
   return (
     <View style={s.root}>
-      <ScrollView
-        contentContainerStyle={s.scroll}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* ─── Header ─────────────────────────────────────────────────────── */}
-        <View style={s.header}>
-          <View>
-            <Text style={s.headerTitle}>Comunidades</Text>
-            <Text style={s.headerSub}>Encontre sua turma de viagem</Text>
-          </View>
-          <TouchableOpacity
-            style={s.createBtn}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              setCreateModalVisible(true);
-            }}
-            activeOpacity={0.8}
-          >
-            <Plus size={18} color="#FFF" strokeWidth={2.5} />
-          </TouchableOpacity>
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <View style={s.top}>
+          <View style={{ flex: 1 }}><SearchField value={query} onChangeText={setQuery} placeholder="Buscar comunidades" /></View>
+          <Pressable onPress={() => setCreateOpen(true)} accessibilityRole="button" accessibilityLabel="Criar comunidade" style={({ pressed }) => [s.create, pressed && s.pressed]}>
+            <Plus size={18} weight="bold" color={colors.onPrimary} />
+            <Text style={s.createText}>Criar</Text>
+          </Pressable>
         </View>
 
-        {/* ─── Search ─────────────────────────────────────────────────────── */}
-        <View style={s.searchBox}>
-          <Search size={16} color={MUTED} />
-          <TextInput
-            placeholder="Buscar comunidades..."
-            placeholderTextColor={MUTED}
-            style={s.searchInput}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} accessibilityRole="tablist">
+          {TABS.map((t) => <FilterChip key={t.id} label={t.label} selected={tab === t.id} onPress={() => setTab(t.id)} />)}
+        </ScrollView>
 
-        {/* ─── Tabs ───────────────────────────────────────────────────────── */}
-        <View style={s.tabsRow}>
-          {TABS.map(t => (
-            <TouchableOpacity
-              key={t.key}
-              style={[s.tabPill, activeTab === t.key && s.tabPillActive]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setActiveTab(t.key);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={[s.tabPillText, activeTab === t.key && s.tabPillTextActive]}>
-                {t.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {tab === 'minhas' && renderState(mine, myList, (
+          <ChatEmpty icon={UsersThree} title="Você ainda não está em nenhuma comunidade" text="Crie a sua ou entre em uma na aba Descobrir para conhecer outros viajantes." action="Criar comunidade" onAction={() => setCreateOpen(true)} />
+        ))}
 
-        {/* ─── Minhas ─────────────────────────────────────────────────────── */}
-        {activeTab === 'minhas' && (
-          <>
-            <View style={s.sectionHeader}>
-              <Text style={s.sectionTitle}>Minhas Comunidades</Text>
-            </View>
+        {tab === 'descobrir' && renderState(all, allList, (
+          <ChatEmpty icon={Globe} title="Nenhuma comunidade pública ainda" text="Seja a primeira pessoa a criar uma." action="Criar comunidade" onAction={() => setCreateOpen(true)} />
+        ))}
 
-            {isLoadingMy ? (
-              <ActivityIndicator color={PRIMARY} style={{ marginTop: 32 }} />
-            ) : filteredMy.length > 0 ? (
-              filteredMy.map((comm: any) => (
-                <CommunityCard
-                  key={comm.id}
-                  comm={comm}
-                  onPress={() => router.push(`/community/${comm.id}`)}
-                />
-              ))
-            ) : (
-              <View style={s.empty}>
-                <View style={s.emptyIconWrap}>
-                  <Users size={28} color={PRIMARY} />
-                </View>
-                <Text style={s.emptyTitle}>Nenhuma comunidade ainda</Text>
-                <Text style={s.emptySub}>
-                  Crie ou entre em uma comunidade para se conectar com outros viajantes.
-                </Text>
-                <TouchableOpacity
-                  style={s.emptyAction}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    setCreateModalVisible(true);
-                  }}
-                >
-                  <Plus size={14} color={PRIMARY} />
-                  <Text style={s.emptyActionText}>Criar comunidade</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </>
-        )}
-
-        {/* ─── Descobrir ──────────────────────────────────────────────────── */}
-        {activeTab === 'descobrir' && (
-          <>
-            <View style={s.sectionHeader}>
-              <Text style={s.sectionTitle}>Descobrir</Text>
-            </View>
-
-            {isLoadingAll ? (
-              <ActivityIndicator color={PRIMARY} style={{ marginTop: 32 }} />
-            ) : filteredAll.length > 0 ? (
-              filteredAll.map((comm: any) => (
-                <CommunityCard
-                  key={comm.id}
-                  comm={comm}
-                  onPress={() => router.push(`/community/${comm.id}`)}
-                />
-              ))
-            ) : (
-              <View style={s.empty}>
-                <View style={s.emptyIconWrap}>
-                  <Globe size={28} color={PRIMARY} />
-                </View>
-                <Text style={s.emptyTitle}>Nenhuma comunidade pública</Text>
-                <Text style={s.emptySub}>
-                  Volte mais tarde ou seja o primeiro a criar uma!
-                </Text>
-              </View>
-            )}
-          </>
-        )}
-
-        {/* ─── Eventos ────────────────────────────────────────────────────── */}
-        {activeTab === 'eventos' && (
-          <>
-            <View style={s.sectionHeader}>
-              <Text style={s.sectionTitle}>Meus Eventos</Text>
-            </View>
-
-            {isLoadingEvents ? (
-              <ActivityIndicator color={PRIMARY} style={{ marginTop: 32 }} />
-            ) : myEvents && myEvents.length > 0 ? (
-              myEvents.map(event => {
-                const iconObj = AVAILABLE_EVENT_ICONS.find(i => i.id === event.icon);
-                const IconComp = iconObj?.component;
-
+        {tab === 'eventos' && (
+          events.isLoading ? <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} accessibilityLabel="Carregando" />
+          : events.isError && !events.data ? <ChatEmpty icon={WifiSlash} title="Não conseguimos carregar" text="Confira sua internet e tente de novo." action="Tentar de novo" onAction={() => events.refetch()} secondary />
+          : events.data && events.data.length > 0 ? (
+            <View style={{ gap: 12 }}>
+              {events.data.map((event: any) => {
+                const Glyph = eventIcon(event.icon)?.component ?? MapPin;
                 return (
-                  <View key={event.id} style={s.eventCard}>
-                    {/* Icon + title row */}
-                    <View style={s.eventCardTop}>
-                      <View style={s.eventIconCircle}>
-                        {IconComp ? (
-                          <IconComp size={22} color={PRIMARY} />
-                        ) : (
-                          <Text style={{ fontSize: 22 }}>{event.icon}</Text>
-                        )}
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={s.eventTitle} numberOfLines={1}>{event.title}</Text>
-                        <View style={s.eventMetaRow}>
-                          <MapPin size={11} color={MUTED} />
-                          <Text style={s.eventMetaText} numberOfLines={1}>
-                            {event.location_name}
-                          </Text>
-                        </View>
+                  <View key={event.id} style={s.event}>
+                    <View style={s.eventTop}>
+                      <View style={s.eventTile}><Glyph size={24} weight="duotone" color={colors.primary} /></View>
+                      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                        <Text style={s.cardTitle} numberOfLines={1}>{event.title}</Text>
+                        <View style={s.meta}><MapPin size={14} weight="fill" color={colors.textMuted} /><Text style={s.metaText} numberOfLines={1}>{event.location_name || 'Local marcado no mapa'}</Text></View>
                       </View>
                     </View>
-
-                    {/* Date/time pills */}
-                    <View style={s.eventPillsRow}>
-                      <View style={s.eventPill}>
-                        <Calendar size={11} color={PRIMARY} />
-                        <Text style={s.eventPillText}>{formatDate(event.start_time)}</Text>
-                      </View>
-                      <View style={s.eventPill}>
-                        <Clock size={11} color={PRIMARY} />
-                        <Text style={s.eventPillText}>
-                          {formatTime(event.start_time)} – {formatTime(event.end_time)}
-                        </Text>
-                      </View>
+                    <View style={s.pills}>
+                      <View style={s.pill}><CalendarBlank size={14} weight="duotone" color={colors.primary} /><Text style={s.pillText}>{dateOf(event.start_time)}</Text></View>
+                      <View style={s.pill}><Clock size={14} weight="duotone" color={colors.primary} /><Text style={s.pillText}>{`${timeOf(event.start_time)} às ${timeOf(event.end_time)}`}</Text></View>
                     </View>
-
-                    {/* Actions */}
-                    <View style={s.eventActions}>
-                      <TouchableOpacity
-                        style={s.eventActionEdit}
-                        onPress={() => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setEditingEvent(event);
-                        }}
-                        activeOpacity={0.8}
-                      >
-                        <Edit3 size={14} color={PRIMARY} />
-                        <Text style={s.eventActionEditText}>Editar</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={s.eventActionDelete}
-                        onPress={() => handleDeleteEvent(event.id)}
-                        activeOpacity={0.8}
-                      >
-                        <Trash2 size={14} color="#EF4444" />
-                        <Text style={s.eventActionDeleteText}>Excluir</Text>
-                      </TouchableOpacity>
+                    <View style={s.actions}>
+                      <Pressable onPress={() => setEditingEvent(event)} accessibilityRole="button" style={({ pressed }) => [s.action, s.actionEdit, pressed && s.pressed]}>
+                        <PencilSimple size={18} weight="bold" color={colors.primary} /><Text style={[s.actionText, { color: colors.primary }]}>Editar</Text>
+                      </Pressable>
+                      <Pressable onPress={() => handleDelete(event)} accessibilityRole="button" style={({ pressed }) => [s.action, s.actionDelete, pressed && s.pressed]}>
+                        <Trash size={18} weight="bold" color={colors.error} /><Text style={[s.actionText, { color: colors.error }]}>Excluir</Text>
+                      </Pressable>
                     </View>
                   </View>
                 );
-              })
-            ) : (
-              <View style={s.empty}>
-                <View style={s.emptyIconWrap}>
-                  <CalendarDays size={28} color={PRIMARY} />
-                </View>
-                <Text style={s.emptyTitle}>Nenhum evento criado</Text>
-                <Text style={s.emptySub}>
-                  Crie eventos no mapa para reunir viajantes em um local.
-                </Text>
-              </View>
-            )}
-          </>
+              })}
+            </View>
+          ) : (
+            <ChatEmpty icon={CalendarBlank} title="Você ainda não criou eventos" text="Abra a aba Tá rolando e toque em Criar evento para reunir viajantes em um lugar." />
+          )
         )}
       </ScrollView>
 
-      <EditEventModal
-        visible={!!editingEvent}
-        event={editingEvent}
-        onClose={() => setEditingEvent(null)}
-      />
-
-      <CreateCommunityModal
-        visible={createModalVisible}
-        onClose={() => setCreateModalVisible(false)}
-      />
+      <EditEventModal visible={!!editingEvent} event={editingEvent} onClose={() => setEditingEvent(null)} />
+      <CreateCommunityModal visible={createOpen} onClose={() => setCreateOpen(false)} />
     </View>
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
-const getStyles = (colors: any, isDark: boolean) => {
-  const BG       = isDark ? '#0A0A0C' : colors.background;
-  const CARD     = isDark ? '#141416' : colors.card;
-  const BORDER   = isDark ? '#222226' : colors.border;
-  const MUTED    = isDark ? '#A1A1AA' : colors.textSecondary;
-  const TEXT     = isDark ? '#FFFFFF' : colors.textPrimary;
-  const PRIMARY  = '#6338FA';
-  const PRIMARY_DIM = isDark ? 'rgba(99,56,250,0.15)' : 'rgba(99,56,250,0.08)';
+const getStyles = (c: ThemeColors) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
+  scroll: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 40, gap: 14, width: '100%', maxWidth: 560, alignSelf: 'center' },
+  pressed: { transform: [{ scale: 0.98 }] },
+  top: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  create: { height: 50, paddingHorizontal: 16, borderRadius: 16, backgroundColor: c.primary, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  createText: { fontSize: 15, fontWeight: '700', color: c.onPrimary },
+  chips: { gap: 8, paddingRight: 20 },
 
-  return StyleSheet.create({
-    root: {
-      flex: 1,
-      backgroundColor: BG,
-    },
-    scroll: {
-      paddingHorizontal: 18,
-      paddingBottom: 100,
-    },
+  card: { flexDirection: 'row', gap: 14, padding: 14, borderRadius: 20, backgroundColor: c.card, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border },
+  cardTile: { width: 52, height: 52, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardTitle: { flexShrink: 1, fontSize: 17, fontWeight: '700', color: c.textPrimary, letterSpacing: -0.2 },
+  tag: { height: 22, paddingHorizontal: 8, borderRadius: 11, justifyContent: 'center' },
+  tagText: { fontSize: 11, fontWeight: '800' },
+  cardDesc: { fontSize: 14, lineHeight: 20, color: c.textSecondary },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaText: { fontSize: 13, color: c.textMuted, flexShrink: 1 },
 
-    // Header
-    header: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingTop: Platform.OS === 'ios' ? 14 : 10,
-      marginBottom: 20,
-    },
-    headerTitle: {
-      fontSize: 26,
-      fontWeight: '800',
-      color: TEXT,
-      letterSpacing: -0.5,
-    },
-    headerSub: {
-      fontSize: 13,
-      color: MUTED,
-      marginTop: 1,
-      fontWeight: '500',
-    },
-    createBtn: {
-      width: 38,
-      height: 38,
-      borderRadius: 19,
-      backgroundColor: PRIMARY,
-      justifyContent: 'center',
-      alignItems: 'center',
-      shadowColor: PRIMARY,
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.45,
-      shadowRadius: 10,
-      elevation: 6,
-    },
-
-    // Search
-    searchBox: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: isDark ? CARD : colors.surface,
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: BORDER,
-      paddingHorizontal: 14,
-      height: 46,
-      marginBottom: 18,
-      gap: 10,
-    },
-    searchInput: {
-      flex: 1,
-      fontSize: 14,
-      color: TEXT,
-      fontWeight: '500',
-    },
-
-    // Tabs
-    tabsRow: {
-      flexDirection: 'row',
-      gap: 8,
-      marginBottom: 22,
-    },
-    tabPill: {
-      paddingHorizontal: 18,
-      paddingVertical: 9,
-      borderRadius: 24,
-      backgroundColor: isDark ? CARD : colors.surface,
-      borderWidth: 1,
-      borderColor: BORDER,
-    },
-    tabPillActive: {
-      backgroundColor: PRIMARY,
-      borderColor: PRIMARY,
-    },
-    tabPillText: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: MUTED,
-    },
-    tabPillTextActive: {
-      color: '#FFFFFF',
-    },
-
-    // Section header
-    sectionHeader: {
-      marginBottom: 14,
-    },
-    sectionTitle: {
-      fontSize: 17,
-      fontWeight: '700',
-      color: TEXT,
-      letterSpacing: -0.2,
-    },
-
-    // Community card
-    card: {
-      backgroundColor: CARD,
-      borderRadius: 20,
-      borderWidth: 1,
-      borderColor: BORDER,
-      padding: 16,
-      marginBottom: 12,
-      gap: 8,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: isDark ? 0.18 : 0.05,
-      shadowRadius: 8,
-      elevation: 3,
-    },
-    cardTypeBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-      alignSelf: 'flex-start',
-      paddingHorizontal: 9,
-      paddingVertical: 4,
-      borderRadius: 10,
-    },
-    cardTypeBadgeText: {
-      fontSize: 11,
-      fontWeight: '700',
-      letterSpacing: 0.2,
-    },
-    cardTitle: {
-      fontSize: 16,
-      fontWeight: '700',
-      color: TEXT,
-      letterSpacing: -0.2,
-    },
-    cardDesc: {
-      fontSize: 13,
-      color: MUTED,
-      lineHeight: 18,
-    },
-    cardMeta: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-    },
-    cardMetaText: {
-      fontSize: 12,
-      color: MUTED,
-      fontWeight: '500',
-    },
-    cardFooter: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 14,
-      marginTop: 4,
-      paddingTop: 12,
-      borderTopWidth: 1,
-      borderTopColor: BORDER,
-    },
-    cardStat: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-    },
-    cardStatText: {
-      fontSize: 12,
-      color: MUTED,
-      fontWeight: '500',
-    },
-
-    // Event card
-    eventCard: {
-      backgroundColor: CARD,
-      borderRadius: 20,
-      borderWidth: 1,
-      borderColor: BORDER,
-      padding: 16,
-      marginBottom: 12,
-      gap: 12,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: isDark ? 0.18 : 0.05,
-      shadowRadius: 8,
-      elevation: 3,
-    },
-    eventCardTop: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-    },
-    eventIconCircle: {
-      width: 46,
-      height: 46,
-      borderRadius: 23,
-      backgroundColor: PRIMARY_DIM,
-      borderWidth: 1,
-      borderColor: 'rgba(99,56,250,0.3)',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    eventTitle: {
-      fontSize: 15,
-      fontWeight: '700',
-      color: TEXT,
-      marginBottom: 3,
-    },
-    eventMetaRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-    },
-    eventMetaText: {
-      fontSize: 12,
-      color: MUTED,
-      fontWeight: '500',
-    },
-    eventPillsRow: {
-      flexDirection: 'row',
-      gap: 8,
-      flexWrap: 'wrap',
-    },
-    eventPill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-      backgroundColor: PRIMARY_DIM,
-      borderRadius: 10,
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderWidth: 1,
-      borderColor: 'rgba(99,56,250,0.2)',
-    },
-    eventPillText: {
-      fontSize: 12,
-      color: isDark ? '#C4B5FD' : colors.primary,
-      fontWeight: '600',
-    },
-    eventActions: {
-      flexDirection: 'row',
-      gap: 10,
-      paddingTop: 4,
-      borderTopWidth: 1,
-      borderTopColor: BORDER,
-    },
-    eventActionEdit: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      backgroundColor: PRIMARY_DIM,
-      borderRadius: 12,
-      paddingVertical: 9,
-      borderWidth: 1,
-      borderColor: 'rgba(99,56,250,0.25)',
-    },
-    eventActionEditText: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: PRIMARY,
-    },
-    eventActionDelete: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      backgroundColor: isDark ? 'rgba(239,68,68,0.1)' : '#FEE2E2',
-      borderRadius: 12,
-      paddingVertical: 9,
-      borderWidth: 1,
-      borderColor: isDark ? 'rgba(239,68,68,0.2)' : '#FECACA',
-    },
-    eventActionDeleteText: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: '#EF4444',
-    },
-
-    // Empty state
-    empty: {
-      alignItems: 'center',
-      paddingVertical: 48,
-      paddingHorizontal: 24,
-    },
-    emptyIconWrap: {
-      width: 64,
-      height: 64,
-      borderRadius: 32,
-      backgroundColor: PRIMARY_DIM,
-      borderWidth: 1,
-      borderColor: 'rgba(99,56,250,0.25)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: 16,
-    },
-    emptyTitle: {
-      fontSize: 16,
-      fontWeight: '700',
-      color: TEXT,
-      marginBottom: 6,
-      letterSpacing: -0.2,
-    },
-    emptySub: {
-      fontSize: 13,
-      color: MUTED,
-      textAlign: 'center',
-      lineHeight: 19,
-    },
-    emptyAction: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      marginTop: 20,
-      paddingHorizontal: 18,
-      paddingVertical: 10,
-      borderRadius: 14,
-      backgroundColor: PRIMARY_DIM,
-      borderWidth: 1,
-      borderColor: 'rgba(99,56,250,0.3)',
-    },
-    emptyActionText: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: PRIMARY,
-    },
-  });
-};
+  event: { padding: 14, gap: 12, borderRadius: 20, backgroundColor: c.card, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border },
+  eventTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  eventTile: { width: 48, height: 48, borderRadius: 16, backgroundColor: c.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 30, paddingHorizontal: 12, borderRadius: 15, backgroundColor: c.surface },
+  pillText: { fontSize: 13, fontWeight: '600', color: c.textPrimary },
+  actions: { flexDirection: 'row', gap: 10 },
+  action: { flex: 1, height: 44, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  actionEdit: { backgroundColor: c.primarySoft },
+  actionDelete: { backgroundColor: c.errorSoft },
+  actionText: { fontSize: 15, fontWeight: '700' },
+});

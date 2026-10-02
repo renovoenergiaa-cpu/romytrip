@@ -1,222 +1,116 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
-import { X, Globe, Lock, Clock, Users } from 'lucide-react-native';
-import { colors, spacing, typography } from '../theme';
+import { useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Sheet } from './Sheet';
+import { useTheme, type ThemeColors } from '../theme';
 import { useCreateCommunity } from '../hooks/useCommunities';
 import { CityAutocomplete } from './CityAutocomplete';
 import { CustomDatePicker } from './CustomDatePicker';
+import { showError } from '../lib/dialogs';
+import { Clock, Globe, LockSimple, Users, type Icon } from '../features/onboarding/icons';
 
-export default function CreateCommunityModal({ visible, onClose }: { visible: boolean, onClose: () => void }) {
+// `value` é gravado no banco (communities.type): NÃO alterar os nomes
+const TYPES: { value: string; label: string; text: string; icon: Icon; color: string; bg: string }[] = [
+  { value: 'Pública', label: 'Pública', text: 'Qualquer pessoa pode entrar', icon: Users, color: '#10B981', bg: '#D1FAE5' },
+  { value: 'Privada', label: 'Privada', text: 'Só entra quem for convidado', icon: LockSimple, color: '#F59E0B', bg: '#FEF3C7' },
+  { value: 'Internacional', label: 'Internacional', text: 'Para viajantes do mundo todo', icon: Globe, color: '#3B82F6', bg: '#DBEAFE' },
+  { value: 'Temporária', label: 'Temporária', text: 'Some numa data que você escolhe', icon: Clock, color: '#A855F7', bg: '#F3E8FF' },
+];
+
+export default function CreateCommunityModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { colors, isDark } = useTheme();
+  const s = useMemo(() => getStyles(colors), [colors]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState('Pública');
   const [location, setLocation] = useState('');
   const [endDate, setEndDate] = useState<string | null>(null);
-  
   const { mutate: createCommunity, isPending } = useCreateCommunity();
 
+  const canCreate = title.trim().length > 0 && !isPending;
+
   const handleCreate = () => {
-    if (!title.trim()) return;
-
-    let color = '#10B981';
-    let bgColor = '#D1FAE5';
-    
-    if (type === 'Privada') { color = '#F59E0B'; bgColor = '#FEF3C7'; }
-    if (type === 'Internacional') { color = '#3B82F6'; bgColor = '#DBEAFE'; }
-    if (type === 'Temporária') { color = '#A855F7'; bgColor = '#F3E8FF'; }
-
-    createCommunity({
-      title,
-      description,
-      type,
-      location,
-      end_date: endDate || undefined,
-      color,
-      bg_color: bgColor,
-    }, {
-      onSuccess: () => {
-        setTitle('');
-        setDescription('');
-        setType('Pública');
-        setLocation('');
-        setEndDate(null);
-        onClose();
+    if (!canCreate) return;
+    const look = TYPES.find((t) => t.value === type) ?? TYPES[0];
+    createCommunity(
+      {
+        title: title.trim(),
+        description: description.trim(),
+        type,
+        location,
+        end_date: endDate || undefined,
+        color: look.color,
+        bg_color: look.bg,
       },
-      onError: (err: any) => {
-        Alert.alert('Erro ao criar comunidade', err.message || 'Verifique se você executou o código SQL no painel do Supabase.');
-      }
-    });
+      {
+        onSuccess: () => { setTitle(''); setDescription(''); setType('Pública'); setLocation(''); setEndDate(null); onClose(); },
+        onError: (err: any) => showError('Não foi possível criar a comunidade', err?.message || 'Tente de novo em instantes.'),
+      },
+    );
   };
 
-  const types = [
-    { label: 'Pública', icon: <Users size={16} color={type === 'Pública' ? '#FFF' : '#10B981'} />, color: '#10B981' },
-    { label: 'Privada', icon: <Lock size={16} color={type === 'Privada' ? '#FFF' : '#F59E0B'} />, color: '#F59E0B' },
-    { label: 'Internacional', icon: <Globe size={16} color={type === 'Internacional' ? '#FFF' : '#3B82F6'} />, color: '#3B82F6' },
-    { label: 'Temporária', icon: <Clock size={16} color={type === 'Temporária' ? '#FFF' : '#A855F7'} />, color: '#A855F7' },
-  ];
-
   return (
-    <Modal visible={visible} animationType="slide" transparent={true}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.overlay}>
-        <View style={styles.content}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Criar Comunidade</Text>
-            <TouchableOpacity onPress={onClose} disabled={isPending} style={styles.closeBtn}>
-              <X size={20} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            <Text style={styles.label}>Nome do Grupo</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ex: Brasileiros na Austrália"
-              placeholderTextColor={colors.textMuted}
-              value={title}
-              onChangeText={setTitle}
-            />
-
-            <Text style={styles.label}>Tipo de Grupo</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.typeRow}>
-              {types.map(t => (
-                <TouchableOpacity 
-                  key={t.label}
-                  style={[styles.typeBtn, type === t.label && { backgroundColor: t.color, borderColor: t.color }]}
-                  onPress={() => setType(t.label)}
-                >
-                  {t.icon}
-                  <Text style={[styles.typeText, type === t.label && { color: '#FFF' }]}>{t.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <Text style={styles.label}>Localização (Opcional)</Text>
-            <View style={{ zIndex: 10 }}>
-              <CityAutocomplete
-                value={location}
-                onChangeText={setLocation}
-                placeholder="Ex: Sydney, Austrália"
-                darkTheme={true}
-              />
-            </View>
-
-            {type === 'Temporária' && (
-              <>
-                <Text style={styles.label}>Data de Encerramento</Text>
-                <CustomDatePicker
-                  value={endDate}
-                  onChange={setEndDate}
-                  placeholder="DD/MM/AAAA"
-                  minimumDate={new Date()}
-                />
-              </>
-            )}
-
-            <Text style={styles.label}>Descrição (Opcional)</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="Sobre o que é este grupo?"
-              placeholderTextColor={colors.textMuted}
-              multiline
-              numberOfLines={3}
-              value={description}
-              onChangeText={setDescription}
-            />
-
-            <TouchableOpacity 
-              style={[styles.submitBtn, (!title.trim() || isPending) && { opacity: 0.6 }]} 
-              onPress={handleCreate}
-              disabled={!title.trim() || isPending}
-            >
-              {isPending ? <ActivityIndicator color="#FFF" /> : <Text style={styles.submitText}>Criar Comunidade</Text>}
-            </TouchableOpacity>
-          </ScrollView>
+    <Sheet visible={visible} onClose={isPending ? () => {} : onClose} title="Criar comunidade" fill>
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 18, paddingBottom: 220 }}>
+        <View style={s.field}>
+          <Text style={s.label}>Nome do grupo</Text>
+          <TextInput value={title} onChangeText={setTitle} placeholder="Ex.: Brasileiros na Austrália" placeholderTextColor={colors.textMuted} selectionColor={colors.primary} maxLength={80} accessibilityLabel="Nome do grupo" style={s.input} />
         </View>
-      </KeyboardAvoidingView>
-    </Modal>
+
+        <View style={s.field}>
+          <Text style={s.label}>Tipo de grupo</Text>
+          <View style={{ gap: 8 }}>
+            {TYPES.map((t) => {
+              const on = type === t.value;
+              return (
+                <Pressable key={t.value} onPress={() => setType(t.value)} accessibilityRole="radio" accessibilityState={{ checked: on }} style={[s.type, on && s.typeOn]}>
+                  <View style={[s.typeTile, { backgroundColor: on ? colors.card : colors.surface }]}><t.icon size={22} weight="duotone" color={on ? colors.primary : colors.textSecondary} /></View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.typeLabel, on && { color: colors.primary }]}>{t.label}</Text>
+                    <Text style={s.typeText}>{t.text}</Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={[s.field, { zIndex: 10 }]}>
+          <Text style={s.label}>Localização <Text style={s.optional}>(opcional)</Text></Text>
+          <CityAutocomplete value={location} onChangeText={setLocation} placeholder="Ex.: Sydney, Austrália" darkTheme={isDark} />
+        </View>
+
+        {type === 'Temporária' ? (
+          <View style={s.field}>
+            <Text style={s.label}>Data de encerramento</Text>
+            <CustomDatePicker value={endDate} onChange={setEndDate} placeholder="DD/MM/AAAA" minimumDate={new Date()} />
+          </View>
+        ) : null}
+
+        <View style={s.field}>
+          <Text style={s.label}>Descrição <Text style={s.optional}>(opcional)</Text></Text>
+          <TextInput value={description} onChangeText={setDescription} placeholder="Sobre o que é este grupo?" placeholderTextColor={colors.textMuted} selectionColor={colors.primary} multiline maxLength={300} accessibilityLabel="Descrição" style={[s.input, s.textArea]} />
+        </View>
+      </ScrollView>
+
+      <Pressable onPress={handleCreate} disabled={!canCreate} accessibilityRole="button" style={({ pressed }) => [s.cta, !canCreate && s.ctaOff, pressed && canCreate && { transform: [{ scale: 0.98 }] }]}>
+        {isPending ? <ActivityIndicator color={colors.onPrimary} /> : <Text style={[s.ctaText, !canCreate && { color: colors.textMuted }]}>Criar comunidade</Text>}
+      </Pressable>
+    </Sheet>
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-end',
-  },
-  content: {
-    backgroundColor: '#111111',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    padding: spacing.lg,
-    maxHeight: '90%',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-    paddingTop: spacing.xs,
-  },
-  title: {
-    ...typography.h2,
-    color: '#FFF',
-    fontWeight: '800',
-  },
-  closeBtn: {
-    backgroundColor: '#2A2A2A',
-    padding: 8,
-    borderRadius: 20,
-  },
-  label: {
-    ...typography.caption,
-    fontWeight: 'bold',
-    color: '#A1A1AA',
-    marginBottom: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  input: {
-    backgroundColor: '#2A2A2A',
-    borderRadius: 12,
-    padding: spacing.md,
-    ...typography.body,
-    color: '#FFF',
-    minHeight: 50,
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  typeRow: {
-    flexDirection: 'row',
-    marginBottom: spacing.sm,
-  },
-  typeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#333',
-    backgroundColor: '#1A1A1A',
-    borderRadius: 20,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginRight: spacing.sm,
-    gap: 6,
-  },
-  typeText: {
-    ...typography.body,
-    fontWeight: '600',
-    color: '#A1A1AA',
-  },
-  submitBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 16,
-    padding: spacing.md,
-    alignItems: 'center',
-    marginTop: spacing.xl,
-    marginBottom: spacing.xxl,
-  },
-  submitText: {
-    ...typography.h3,
-    color: '#FFF',
-  },
+const getStyles = (c: ThemeColors) => StyleSheet.create({
+  field: { gap: 8 },
+  label: { fontSize: 14, fontWeight: '700', color: c.textPrimary },
+  optional: { fontWeight: '400', color: c.textMuted },
+  input: { minHeight: 50, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: c.textPrimary, backgroundColor: c.surface },
+  textArea: { minHeight: 90, maxHeight: 150, textAlignVertical: 'top', lineHeight: 22 },
+  type: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, borderRadius: 18, backgroundColor: c.card, borderWidth: 1.5, borderColor: c.border },
+  typeOn: { borderColor: c.primary, backgroundColor: c.primarySoft },
+  typeTile: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  typeLabel: { fontSize: 16, fontWeight: '700', color: c.textPrimary },
+  typeText: { fontSize: 13, color: c.textSecondary, marginTop: 1 },
+  cta: { height: 54, borderRadius: 18, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  ctaOff: { backgroundColor: c.surface },
+  ctaText: { fontSize: 17, fontWeight: '700', color: c.onPrimary },
 });
