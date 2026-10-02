@@ -8,6 +8,7 @@ export { BeerSteinIcon as BeerStein } from 'phosphor-react-native/src/icons/Beer
 export { BowlSteamIcon as BowlSteam } from 'phosphor-react-native/src/icons/BowlSteam';
 export { CameraIcon as Camera } from 'phosphor-react-native/src/icons/Camera';
 export { CaretLeftIcon as CaretLeft } from 'phosphor-react-native/src/icons/CaretLeft';
+export { CaretRightIcon as CaretRight } from 'phosphor-react-native/src/icons/CaretRight';
 export { ChatsCircleIcon as ChatsCircle } from 'phosphor-react-native/src/icons/ChatsCircle';
 export { CheckIcon as Check } from 'phosphor-react-native/src/icons/Check';
 export { CoffeeIcon as Coffee } from 'phosphor-react-native/src/icons/Coffee';

@@ -448,12 +448,12 @@ export function LockedBar({ text }: { text: string }) {
 
 /* ─── Foto em tela cheia ───────────────────────────────────────────────────── */
 
-export function ImageViewer({ uri, onClose }: { uri: string | null; onClose: () => void }) {
+export function ImageViewer({ uri, onClose, label = 'Foto da conversa' }: { uri: string | null; onClose: () => void; label?: string }) {
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={!!uri} animationType="fade" transparent onRequestClose={onClose} statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center' }}>
-        {uri ? <Image source={{ uri }} style={{ width: '100%', height: '80%' }} resizeMode="contain" accessibilityLabel="Foto da conversa" /> : null}
+        {uri ? <Image source={{ uri }} style={{ width: '100%', height: '80%' }} resizeMode="contain" accessibilityLabel={label} /> : null}
         <Pressable
           onPress={onClose}
           accessibilityRole="button"

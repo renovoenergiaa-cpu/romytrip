@@ -4,6 +4,36 @@ import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 
+const IMAGE_EXT_BY_MIME: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+const MAX_IMAGE_MB = 15;
+
+// Lê a foto escolhida. No web o seletor devolve um blob: URL (sem extensão) e o expo-file-system não existe lá.
+async function readImage(uri: string) {
+  const tooBig = () => new Error(`A imagem é muito grande (máximo ${MAX_IMAGE_MB} MB).`);
+  if (Platform.OS === 'web') {
+    const blob = await (await fetch(uri)).blob();
+    if (blob.size > MAX_IMAGE_MB * 1024 * 1024) throw tooBig();
+    const ext = IMAGE_EXT_BY_MIME[blob.type] ?? 'jpg';
+    return { body: blob, ext, contentType: IMAGE_EXT_BY_MIME[blob.type] ? blob.type : 'image/jpeg' };
+  }
+  const info = await FileSystem.getInfoAsync(uri);
+  if (info.exists && info.size && info.size > MAX_IMAGE_MB * 1024 * 1024) throw tooBig();
+  const raw = (uri.split('?')[0].split('.').pop() ?? '').toLowerCase();
+  const ext = raw === 'png' || raw === 'webp' ? raw : 'jpg';
+  const body = decode(await FileSystem.readAsStringAsync(uri, { encoding: 'base64' }));
+  return { body, ext, contentType: ext === 'jpg' ? 'image/jpeg' : `image/${ext}` };
+}
+
+// Capa e ícone da comunidade (a policy do bucket aceita nomes "community_…")
+async function uploadCommunityImage(communityId: string, uri: string, kind: 'icon' | 'cover') {
+  if (/^https?:\/\//.test(uri)) return uri;
+  const { body, ext, contentType } = await readImage(uri);
+  const fileName = `community_${communityId}_${kind}_${Date.now()}.${ext}`;
+  const { error } = await supabase.storage.from('avatars').upload(fileName, body, { contentType });
+  if (error) throw error;
+  return supabase.storage.from('avatars').getPublicUrl(fileName).data.publicUrl;
+}
+
 export function useCommunities() {
   return useQuery({
     queryKey: ['communities'],
@@ -74,7 +104,7 @@ export function useCommunity(id: string) {
           community_members(count)
         `)
         .eq('id', id)
-        .single();
+        .maybeSingle(); // sem linha = não existe mais ou é privada (null, não erro)
 
       if (error) throw error;
       return data;
@@ -97,7 +127,8 @@ export function useCommunityMembers(id: string) {
           role,
           users(name, photos)
         `)
-        .eq('community_id', id);
+        .eq('community_id', id)
+        .order('joined_at', { ascending: true });
 
       if (error) throw error;
       
@@ -149,6 +180,46 @@ export function useJoinCommunity() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['community_members', variables.communityId] });
+      queryClient.invalidateQueries({ queryKey: ['community', variables.communityId] });
+      queryClient.invalidateQueries({ queryKey: ['communities'] });
+      queryClient.invalidateQueries({ queryKey: ['my_communities'] });
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    },
+  });
+}
+
+export function useLeaveCommunity() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ communityId, groupChatId }: { communityId: string; groupChatId?: string | null }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('community_members')
+        .delete()
+        .eq('community_id', communityId)
+        .eq('user_id', user.id)
+        .select('user_id');
+      if (error) throw error;
+      if (!data?.length) throw new Error('Não foi possível sair da comunidade.');
+
+      // Sai também do chat do grupo
+      if (groupChatId) {
+        const { error: chatError } = await supabase
+          .from('conversation_participants')
+          .delete()
+          .eq('conversation_id', groupChatId)
+          .eq('user_id', user.id);
+        if (chatError) throw chatError;
+      }
+      return { communityId };
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['community_members', variables.communityId] });
+      queryClient.invalidateQueries({ queryKey: ['community', variables.communityId] });
+      queryClient.invalidateQueries({ queryKey: ['communities'] });
       queryClient.invalidateQueries({ queryKey: ['my_communities'] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
@@ -194,38 +265,13 @@ export function useCreateCommunityPost() {
       let publicUrl = null;
 
       if (mediaUri) {
-        const rawExt = mediaUri.substring(mediaUri.lastIndexOf('.') + 1).toLowerCase() || 'jpg';
-        const allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
-        const ext = allowedExts.includes(rawExt) ? rawExt : 'jpg';
+        const { body, ext, contentType } = await readImage(mediaUri);
         const fileName = `${user.id}/${Date.now()}.${ext}`;
-
-        if (Platform.OS === 'web') {
-          const response = await fetch(mediaUri);
-          const blob = await response.blob();
-          if (blob.size > 15 * 1024 * 1024) {
-            throw new Error('A imagem selecionada é muito grande (máximo 15MB).');
-          }
-          const { error: uploadError } = await supabase.storage
-            .from('posts')
-            .upload(fileName, blob, { contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}` });
-          if (uploadError) throw uploadError;
-        } else {
-          const fileInfo = await FileSystem.getInfoAsync(mediaUri);
-          if (fileInfo.exists && fileInfo.size && fileInfo.size > 15 * 1024 * 1024) {
-            throw new Error('A imagem selecionada é muito grande (máximo 15MB).');
-          }
-          const base64 = await FileSystem.readAsStringAsync(mediaUri, { encoding: 'base64' });
-          const { error: uploadError } = await supabase.storage
-            .from('posts')
-            .upload(fileName, decode(base64), { 
-              contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
-              upsert: true 
-            });
-          if (uploadError) throw uploadError;
-        }
-
-        const { data: urlData } = supabase.storage.from('posts').getPublicUrl(fileName);
-        publicUrl = urlData.publicUrl;
+        const { error: uploadError } = await supabase.storage
+          .from('posts')
+          .upload(fileName, body, { contentType });
+        if (uploadError) throw uploadError;
+        publicUrl = supabase.storage.from('posts').getPublicUrl(fileName).data.publicUrl;
       }
 
       const { data, error } = await supabase
@@ -233,7 +279,7 @@ export function useCreateCommunityPost() {
         .insert({
           community_id: communityId,
           user_id: user.id,
-          content: content,
+          content: content.trim(),
           media_url: publicUrl,
         });
 
@@ -243,6 +289,7 @@ export function useCreateCommunityPost() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['community_posts', variables.communityId] });
       queryClient.invalidateQueries({ queryKey: ['my_communities'] }); // update post count
+      queryClient.invalidateQueries({ queryKey: ['communities'] });
     },
   });
 }
@@ -255,113 +302,48 @@ export function useDeleteCommunity() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // The backend RLS should only allow the creator to delete.
-      const { error } = await supabase
+      // A RLS só deixa o criador apagar; sem linha apagada, não deu certo
+      const { data, error } = await supabase
         .from('communities')
         .delete()
-        .eq('id', communityId);
+        .eq('id', communityId)
+        .select('id');
 
       if (error) throw error;
+      if (!data?.length) throw new Error('Só quem criou a comunidade pode excluí-la.');
       return { communityId };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['communities'] });
       queryClient.invalidateQueries({ queryKey: ['my_communities'] });
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
   });
 }
 
-// Update Community Icon
-export function useUpdateCommunityIcon() {
+// Troca a capa ou o ícone (só o criador, pela RLS)
+export function useUpdateCommunityImage() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ communityId, mediaUri }: { communityId: string, mediaUri: string }) => {
+    mutationFn: async ({ communityId, mediaUri, kind }: { communityId: string; mediaUri: string; kind: 'icon' | 'cover' }) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      let publicUrl = mediaUri;
-
-      if (mediaUri.startsWith('file://')) {
-        const ext = mediaUri.substring(mediaUri.lastIndexOf('.') + 1) || 'jpg';
-        const fileName = `community_${communityId}_icon_${Date.now()}.${ext}`;
-        
-        const base64 = await FileSystem.readAsStringAsync(mediaUri, { encoding: 'base64' });
-
-        const { error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(fileName, decode(base64), { 
-            contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}` 
-          });
-
-        if (uploadError) throw uploadError;
-
-        const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
-        publicUrl = publicUrlData.publicUrl;
-      }
-
+      const publicUrl = await uploadCommunityImage(communityId, mediaUri, kind);
+      const column = kind === 'icon' ? 'icon_url' : 'cover_url';
       const { data, error } = await supabase
         .from('communities')
-        .update({ icon_url: publicUrl })
-        .eq('id', communityId);
+        .update({ [column]: publicUrl })
+        .eq('id', communityId)
+        .select('id');
 
       if (error) throw error;
-      return publicUrl;
+      if (!data?.length) throw new Error('Só quem criou a comunidade pode mudar a foto.');
+      return { column, publicUrl };
     },
-    onSuccess: (data, variables) => {
-      queryClient.setQueryData(['community', variables.communityId], (old: any) => ({
-        ...old,
-        icon_url: data
-      }));
-      queryClient.invalidateQueries({ queryKey: ['community', variables.communityId] });
-      queryClient.invalidateQueries({ queryKey: ['communities'] });
-      queryClient.invalidateQueries({ queryKey: ['my_communities'] });
-    },
-  });
-}
-
-// Update Community Cover
-export function useUpdateCommunityCover() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ communityId, mediaUri }: { communityId: string, mediaUri: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      let publicUrl = mediaUri;
-
-      if (mediaUri.startsWith('file://')) {
-        const ext = mediaUri.substring(mediaUri.lastIndexOf('.') + 1) || 'jpg';
-        const fileName = `community_${communityId}_cover_${Date.now()}.${ext}`;
-        
-        const base64 = await FileSystem.readAsStringAsync(mediaUri, { encoding: 'base64' });
-
-        const { error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(fileName, decode(base64), { 
-            contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}` 
-          });
-
-        if (uploadError) throw uploadError;
-
-        const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
-        publicUrl = publicUrlData.publicUrl;
-      }
-
-      const { data, error } = await supabase
-        .from('communities')
-        .update({ cover_url: publicUrl })
-        .eq('id', communityId);
-
-      if (error) throw error;
-      return publicUrl;
-    },
-    onSuccess: (data, variables) => {
-      queryClient.setQueryData(['community', variables.communityId], (old: any) => ({
-        ...old,
-        cover_url: data
-      }));
+    onSuccess: ({ column, publicUrl }, variables) => {
+      queryClient.setQueryData(['community', variables.communityId], (old: any) => (old ? { ...old, [column]: publicUrl } : old));
       queryClient.invalidateQueries({ queryKey: ['community', variables.communityId] });
       queryClient.invalidateQueries({ queryKey: ['communities'] });
       queryClient.invalidateQueries({ queryKey: ['my_communities'] });
@@ -377,17 +359,20 @@ export function useDeleteCommunityPost() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('community_posts')
         .delete()
-        .eq('id', postId);
+        .eq('id', postId)
+        .select('id');
 
       if (error) throw error;
+      if (!data?.length) throw new Error('Você não pode excluir esta publicação.');
       return { postId };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['community_posts'] });
       queryClient.invalidateQueries({ queryKey: ['my_communities'] });
+      queryClient.invalidateQueries({ queryKey: ['communities'] });
     },
   });
 }

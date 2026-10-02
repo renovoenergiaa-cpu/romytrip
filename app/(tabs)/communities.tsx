@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useTheme, type ThemeColors } from '../../src/theme';
@@ -10,8 +10,9 @@ import CreateCommunityModal from '../../src/components/CreateCommunityModal';
 import { confirmAction, showError } from '../../src/lib/dialogs';
 import { eventIcon } from '../../src/features/events/eventIcons';
 import { ChatEmpty, FilterChip, SearchField } from '../../src/features/chat/components';
+import { plural, soft, typeLook } from '../../src/features/communities/look';
 import {
-  CalendarBlank, Clock, Globe, LockSimple, MapPin, PencilSimple, Plus, Trash, Users, UsersThree, WifiSlash, type Icon,
+  CalendarBlank, Clock, Globe, MapPin, PencilSimple, Plus, Trash, UsersThree, WifiSlash,
 } from '../../src/features/onboarding/icons';
 
 type Tab = 'minhas' | 'descobrir' | 'eventos';
@@ -20,24 +21,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'descobrir', label: 'Descobrir' },
   { id: 'eventos', label: 'Meus eventos' },
 ];
-
-// O valor de `type` é gravado no banco: NÃO alterar os nomes
-const typeLook = (c: ThemeColors, type?: string): { color: string; Glyph: Icon } => {
-  if (type === 'Temporária') return { color: c.accent, Glyph: Clock };
-  if (type === 'Internacional') return { color: c.info, Glyph: Globe };
-  if (type === 'Privada') return { color: c.warning, Glyph: LockSimple };
-  return { color: c.success, Glyph: Users };
-};
-
-// "#RRGGBB" -> fundo suave da mesma cor
-const soft = (hex: string, alpha = 0.14) => {
-  const m = /^#([0-9a-f]{6})$/i.exec(hex);
-  if (!m) return hex;
-  const n = parseInt(m[1], 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
-};
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 const timeOf = (iso: string) => {
   const d = new Date(iso);
@@ -57,13 +40,16 @@ function CommunityCard({ comm, onPress, s, colors }: { comm: any; onPress: () =>
     typeof members === 'number' ? plural(members, 'membro', 'membros') : null,
     typeof posts === 'number' ? plural(posts, 'publicação', 'publicações') : null,
   ].filter(Boolean).join(' · ');
+  const title = String(comm.title ?? '').trim() || 'Comunidade';
 
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Abrir comunidade ${comm.title}`} style={({ pressed }) => [s.card, pressed && s.pressed]}>
-      <View style={[s.cardTile, { backgroundColor: soft(color) }]}><Glyph size={26} weight="duotone" color={color} /></View>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Abrir comunidade ${title}`} style={({ pressed }) => [s.card, pressed && s.pressed]}>
+      {comm.icon_url
+        ? <Image source={{ uri: comm.icon_url }} style={s.cardTile} accessibilityIgnoresInvertColors />
+        : <View style={[s.cardTile, { backgroundColor: soft(color) }]}><Glyph size={26} weight="duotone" color={color} /></View>}
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <View style={s.cardTop}>
-          <Text style={s.cardTitle} numberOfLines={1}>{comm.title}</Text>
+          <Text style={s.cardTitle} numberOfLines={1}>{title}</Text>
           <View style={[s.tag, { backgroundColor: soft(color) }]}><Text style={[s.tagText, { color }]}>{comm.type ?? 'Comunidade'}</Text></View>
         </View>
         {comm.description ? <Text style={s.cardDesc} numberOfLines={2}>{comm.description}</Text> : null}
@@ -168,7 +154,7 @@ export default function CommunitiesScreen() {
               })}
             </View>
           ) : (
-            <ChatEmpty icon={CalendarBlank} title="Você ainda não criou eventos" text="Abra a aba Tá rolando e toque em Criar evento para reunir viajantes em um lugar." />
+            <ChatEmpty icon={CalendarBlank} title="Você ainda não criou eventos" text="Na aba Tá rolando, segure no mapa no endereço do evento para reunir viajantes por lá." />
           )
         )}
       </ScrollView>
