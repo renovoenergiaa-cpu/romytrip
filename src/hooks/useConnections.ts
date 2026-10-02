@@ -247,12 +247,16 @@ export function useDiscoveryTravelers(filters: DiscoveryFilters = { gender: 'Tod
       // 0. Fetch current user data to match
       const { data: currentUserData } = await supabase
         .from('users')
-        .select('travel_styles, connection_intentions')
+        .select('travel_styles, connection_intentions, interests, languages, destination, budget')
         .eq('id', user.id)
         .single();
-        
-      const myStyles = currentUserData?.travel_styles || [];
-      const myIntentions = currentUserData?.connection_intentions || [];
+
+      const myStyles: string[] = currentUserData?.travel_styles || [];
+      const myIntentions: string[] = currentUserData?.connection_intentions || [];
+      const myInterests: string[] = currentUserData?.interests || [];
+      const myLanguages: string[] = currentUserData?.languages || [];
+      const myDestination = (currentUserData?.destination || '').split(',')[0].trim().toLowerCase();
+      const myBudget: string = currentUserData?.budget || '';
 
       // 1. Get connections to exclude them from discovery
       const { data: connections } = await supabase
@@ -279,7 +283,7 @@ export function useDiscoveryTravelers(filters: DiscoveryFilters = { gender: 'Tod
           id, name, city, sex, photos, bio, destination,
           check_in, check_out, travel_styles, interests,
           budget, is_free, created_at, connection_intentions,
-          gender_preference, privacy_settings, dob
+          gender_preference, privacy_settings, dob, languages
         `)
         .not('id', 'in', `(${excludedArray.join(',')})`)
         .limit(30);
@@ -428,22 +432,31 @@ export function useDiscoveryTravelers(filters: DiscoveryFilters = { gender: 'Tod
 
       if (users.length === 0) return [];
 
-      // 3. Compute match score for each user
+      // 3. Compatibilidade: pesos maiores para o que mais pesa numa viagem juntos
+      const shared = (a: string[] | null | undefined, b: string[]) => (a || []).filter((x) => b.includes(x)).length;
+      const city = (v?: string | null) => (v || '').split(',')[0].trim().toLowerCase();
+      const BUDGET_STEPS = ['$', '$$', '$$$', '$$$$'];
+
       const scoredUsers = users.map(u => {
-        const theirStyles = u.travel_styles || [];
-        const theirIntentions = u.connection_intentions || [];
-        
-        let commonCount = 0;
-        theirStyles.forEach((s: string) => {
-          if (myStyles.includes(s)) commonCount++;
-        });
-        theirIntentions.forEach((i: string) => {
-          if (myIntentions.includes(i)) commonCount++;
-        });
-        
+        const commonCount =
+          shared(u.travel_styles, myStyles) +
+          shared(u.connection_intentions, myIntentions) +
+          shared(u.interests, myInterests) +
+          shared(u.languages, myLanguages);
+
+        let matchScore =
+          shared(u.travel_styles, myStyles) * 2 +
+          shared(u.connection_intentions, myIntentions) * 2 +
+          shared(u.interests, myInterests) +
+          shared(u.languages, myLanguages);
+        if (myDestination && city(u.destination) === myDestination) matchScore += 4;
+        const budgetGap = Math.abs(BUDGET_STEPS.indexOf(u.budget) - BUDGET_STEPS.indexOf(myBudget));
+        if (BUDGET_STEPS.includes(u.budget) && BUDGET_STEPS.includes(myBudget) && budgetGap <= 1) matchScore += 2 - budgetGap;
+
         return {
           ...u,
-          commonCount
+          commonCount,
+          matchScore,
         };
       });
 
@@ -452,8 +465,8 @@ export function useDiscoveryTravelers(filters: DiscoveryFilters = { gender: 'Tod
         // Sort by highest rating first
         scoredUsers.sort((a, b) => b.rating - a.rating);
       } else {
-        // Sort by highest common count first
-        scoredUsers.sort((a, b) => b.commonCount - a.commonCount);
+        // Mais compatíveis primeiro
+        scoredUsers.sort((a, b) => b.matchScore - a.matchScore);
       }
 
       return scoredUsers;

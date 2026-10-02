@@ -1,86 +1,80 @@
+import { Platform } from 'react-native';
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export interface OnboardingState {
-  // Step 1: Personal
+export interface OnboardingData {
+  // Você
   name: string;
-  dob: string;
+  dob: string; // YYYY-MM-DD
   city: string;
   sex: string;
-  photos: string[]; // local uris or remote urls
+  photos: string[]; // URIs locais (antes do upload) ou URLs remotas
   bio: string;
-  
-  // Step 2: Trip
+  languages: string[];
+
+  // Viagem
   destination: string;
   checkIn: string;
   checkOut: string;
   isFlexible: boolean;
   companions: string;
-  
-  // Step 3: Travel Styles
   travelStyles: string[];
-  
-  // Step 4: Interests
   interests: string[];
-  
-  // Step 5: Social & Budget
   budget: string; // $, $$, $$$, $$$$
+
+  // Conexões
   costSplit: boolean;
   group: boolean;
   onePerson: boolean;
   invitations: boolean;
-
-  // Step 6: Connections
   connectionIntentions: string[];
   genderPreference: string;
 
-  // Actions
-  updateField: (key: keyof Omit<OnboardingState, 'updateField' | 'toggleArrayItem'>, value: any) => void;
-  toggleArrayItem: (key: 'travelStyles' | 'interests' | 'connectionIntentions', item: string) => void;
+  // Pergunta atual do fluxo (retoma de onde parou)
+  stepIndex: number;
+}
+
+export interface OnboardingState extends OnboardingData {
+  updateField: <K extends keyof OnboardingData>(key: K, value: OnboardingData[K]) => void;
+  toggleArrayItem: (key: 'travelStyles' | 'interests' | 'connectionIntentions' | 'languages', item: string) => void;
   reset: () => void;
 }
 
-export const useOnboardingStore = create<OnboardingState>((set) => ({
-  name: '',
-  dob: '',
-  city: '',
-  sex: '',
-  photos: [],
-  bio: '',
-  
-  destination: '',
-  checkIn: '',
-  checkOut: '',
-  isFlexible: false,
-  companions: 'Sozinho(a)',
-  
-  travelStyles: [],
-  interests: [],
-  
-  budget: '$$',
-  costSplit: false,
-  group: false,
-  onePerson: false,
-  invitations: false,
+const initialData: OnboardingData = {
+  name: '', dob: '', city: '', sex: '', photos: [], bio: '', languages: [],
+  destination: '', checkIn: '', checkOut: '', isFlexible: false, companions: '',
+  travelStyles: [], interests: [], budget: '',
+  costSplit: false, group: false, onePerson: false, invitations: false,
+  connectionIntentions: [], genderPreference: '',
+  stepIndex: 0,
+};
 
-  connectionIntentions: [],
-  genderPreference: 'Todos',
+export const useOnboardingStore = create<OnboardingState>()(
+  persist(
+    (set) => ({
+      ...initialData,
 
-  updateField: (key, value) => set((state) => ({ ...state, [key]: value })),
-  
-  toggleArrayItem: (key, item) => set((state) => {
-    const array = state[key] as string[];
-    if (array.includes(item)) {
-      return { ...state, [key]: array.filter((i) => i !== item) };
-    } else {
-      return { ...state, [key]: [...array, item] };
+      updateField: (key, value) => set({ [key]: value } as Partial<OnboardingData>),
+
+      toggleArrayItem: (key, item) =>
+        set((state) => {
+          const array = state[key];
+          return { [key]: array.includes(item) ? array.filter((i) => i !== item) : [...array, item] };
+        }),
+
+      reset: () => set(initialData),
+    }),
+    {
+      name: 'romy-onboarding',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: ({ updateField, toggleArrayItem, reset, ...data }) => data,
+      // No web, fotos ainda não enviadas são blob: URLs que morrem com a aba.
+      onRehydrateStorage: () => (state) => {
+        if (state && Platform.OS === 'web') {
+          state.photos = state.photos.filter((p) => !p.startsWith('blob:'));
+        }
+      },
     }
-  }),
-  
-  reset: () => set({
-    name: '', dob: '', city: '', sex: '', photos: [], bio: '',
-    destination: '', checkIn: '', checkOut: '', isFlexible: false, companions: 'Sozinho(a)',
-    travelStyles: [], interests: [],
-    budget: '$$', costSplit: false, group: false, onePerson: false, invitations: false,
-    connectionIntentions: [], genderPreference: 'Todos'
-  }),
-}));
+  )
+);
