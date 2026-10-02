@@ -1,168 +1,76 @@
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  SafeAreaView, 
-  TextInput, 
-  KeyboardAvoidingView, 
-  Platform, 
-  ScrollView, 
-  ActivityIndicator, 
-  Alert, 
-  Modal, 
-  Image, 
-  Dimensions 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  SafeAreaView,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Image,
+  Dimensions
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { 
-  ChevronLeft, 
-  Send, 
-  Phone, 
-  Video as VideoIcon, 
-  MoreVertical, 
-  Mic, 
-  MicOff, 
-  Trash2, 
-  Play, 
-  Pause, 
-  BellOff, 
-  Archive, 
-  LogOut, 
-  X, 
-  Image as ImageIcon, 
-  PhoneOff, 
-  Camera, 
-  CameraOff, 
+import {
+  Phone,
+  Mic,
+  MicOff,
+  PhoneOff,
+  Camera,
+  CameraOff,
   RefreshCw,
-  Volume2,
-  Sparkles,
-  User,
-  Lock
+  Volume2
 } from 'lucide-react-native';
 import { useState, useRef, useEffect } from 'react';
 import { useGlobalNotification } from '../../src/context/GlobalNotificationContext';
-import { 
-  createAudioPlayer, 
-  AudioModule, 
-  AudioRecorder, 
-  RecordingPresets, 
-  requestRecordingPermissionsAsync, 
-  setAudioModeAsync 
+import {
+  createAudioPlayer,
+  AudioModule,
+  AudioRecorder,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync
 } from 'expo-audio';
-import { VideoView, useVideoPlayer } from 'expo-video';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '../../src/lib/supabase';
-import { resolveChatMediaUrl, useChatMediaUrl } from '../../src/hooks/useChatMedia';
 import { sendPushNotification } from '../../src/services/notifications';
-import { spacing, typography, useTheme } from '../../src/theme';
-import { 
-  useMessages, 
-  useSendMessage, 
-  useCurrentUserId, 
-  useConversations, 
-  useArchiveConversation, 
-  useMuteConversation, 
-  useLeaveConversation, 
+import { confirmAction, showError } from '../../src/lib/dialogs';
+import { spacing, useTheme } from '../../src/theme';
+import {
+  useMessages,
+  useSendMessage,
+  useCurrentUserId,
+  useConversations,
+  useArchiveConversation,
+  useMuteConversation,
+  useLeaveConversation,
   useDeleteConversation,
   translateText
 } from '../../src/hooks/useMessenger';
+import { Avatar } from '../../src/features/onboarding/components';
+import { ChatActionsSheet, describeConversation } from '../../src/features/chat/components';
+import {
+  CallNote, Composer, ConversationHeader, DaySeparator, ImageViewer, LockedBar, MessageBubble,
+} from '../../src/features/chat/conversation';
+import { dayLabel, isDeletedName } from '../../src/features/chat/format';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const ChatVideoItem = ({ uri }: { uri: string }) => {
-  const { data: signedUri } = useChatMediaUrl(uri);
-  const player = useVideoPlayer(signedUri ?? null, (p) => {
-    p.loop = false;
-  });
-  return (
-    <VideoView
-      player={player}
-      style={{ width: '100%', height: '100%' }}
-      nativeControls={true}
-      contentFit="contain"
-    />
-  );
-};
-
-const ChatImageItem = ({ uri, onOpen, style }: { uri: string; onOpen: (signedUri: string) => void; style: any }) => {
-  const { data: signedUri } = useChatMediaUrl(uri);
-  return (
-    <TouchableOpacity onPress={() => signedUri && onOpen(signedUri)} activeOpacity={0.9}>
-      {signedUri ? (
-        <Image source={{ uri: signedUri }} style={style} resizeMode="cover" />
-      ) : (
-        <View style={[style, { justifyContent: 'center', alignItems: 'center' }]}>
-          <ActivityIndicator />
-        </View>
-      )}
-    </TouchableOpacity>
-  );
-};
-
-const AudioPlayer = ({ url, isSender }: { url: string; isSender: boolean }) => {
-  const { colors } = useTheme();
-  const [player, setPlayer] = useState<any>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  
-  const playSound = async () => {
-    try {
-      await setAudioModeAsync({
-        allowsRecording: false,
-        playsInSilentMode: true,
-      });
-
-      if (player) {
-        if (isPlaying) {
-          player.pause();
-          setIsPlaying(false);
-        } else {
-          player.play();
-          setIsPlaying(true);
-        }
-      } else {
-        // Gera o link assinado na hora (o salvo na mensagem pode ter expirado)
-        const src = await resolveChatMediaUrl(url);
-        const newPlayer = createAudioPlayer({ uri: src });
-        newPlayer.play();
-        setPlayer(newPlayer);
-        setIsPlaying(true);
-      }
-    } catch (err) {
-      console.error('Error playing sound:', err);
-      Alert.alert('Áudio indisponível', 'Não foi possível reproduzir este áudio.');
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (player) {
-        try {
-          player.pause();
-          player.remove?.();
-        } catch (e) {}
-      }
-    };
-  }, [player]);
-
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', width: 180, paddingVertical: 4 }}>
-      <TouchableOpacity onPress={playSound}>
-        {isPlaying ? (
-          <Pause size={24} color={isSender ? '#FFF' : colors.primary} />
-        ) : (
-          <Play size={24} color={isSender ? '#FFF' : colors.primary} />
-        )}
-      </TouchableOpacity>
-      <View style={{ flex: 1, height: 4, backgroundColor: isSender ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.1)', marginLeft: 12, borderRadius: 2 }}>
-        <View style={{ width: isPlaying ? '50%' : '0%', height: '100%', backgroundColor: isSender ? '#FFF' : colors.primary, borderRadius: 2 }} />
-      </View>
+// Foto de quem está na chamada; sem foto, a inicial do nome (nunca uma foto de banco de imagens)
+const CallPhoto = ({ uri, name, size, style }: { uri?: string; name: string; size: number; style: any }) =>
+  uri ? (
+    <Image source={{ uri }} style={style} />
+  ) : (
+    <View style={{ marginBottom: StyleSheet.flatten(style)?.marginBottom }}>
+      <Avatar name={name} size={size} />
     </View>
   );
-};
 
 export default function ChatDetailScreen() {
   const { id, name, autoAcceptCall, callType: paramCallType, recipientId: paramRecipientId } = useLocalSearchParams();
@@ -210,7 +118,7 @@ export default function ChatDetailScreen() {
     if (translated) {
       setTranslatedMessages(prev => ({ ...prev, [msgId]: translated }));
     } else {
-      Alert.alert('Erro', 'Não foi possível realizar a tradução.');
+      showError('Tradução indisponível', 'Não foi possível traduzir esta mensagem agora.');
     }
     setTranslatingId(null);
   };
@@ -235,8 +143,6 @@ export default function ChatDetailScreen() {
     typeof paramRecipientId === 'string' ? paramRecipientId : null
   );
 
-  const defaultAvatar = 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80';
-
   // Fetch logged in user profile
   const { data: myProfile } = useQuery({
     queryKey: ['myProfile'],
@@ -254,22 +160,21 @@ export default function ChatDetailScreen() {
   const isArchived = conversation?.is_archived;
   const isMuted = conversation?.is_muted;
 
-  const isDeletedAccount = !isGroup && (
-    conversation?.other_participant?.name === 'Conta Excluída' ||
-    conversation?.other_participant?.name === 'Usuário Romy' ||
-    name === 'Conta Excluída' ||
-    name === 'Usuário Romy' ||
-    (conversation && !conversation.is_group && !conversation.other_participant)
-  );
+  const nameParam = typeof name === 'string' ? name : '';
+  // Enquanto a lista de conversas não chega, usa o nome que veio na rota
+  const who: ReturnType<typeof describeConversation> = conversation
+    ? describeConversation(conversation)
+    : isDeletedName(nameParam)
+      ? { kind: 'deleted', name: 'Conta excluída', photo: undefined }
+      : { kind: 'person', name: nameParam || 'Viajante', photo: undefined };
+  const isDeletedAccount = who.kind === 'deleted';
+  // Direto e sem o outro participante: a pessoa saiu da conversa
+  const isLocked = who.kind === 'deleted' || who.kind === 'left';
 
-  const myPhoto = myProfile?.photos?.[0] || defaultAvatar;
+  const myPhoto = myProfile?.photos?.[0] || '';
   const myName = myProfile?.name || 'Você';
-  const recipientName = isDeletedAccount 
-    ? 'Conta Excluída' 
-    : ((name as string) || conversation?.other_participant?.name || 'Viajante');
-  const recipientPhoto = isDeletedAccount 
-    ? null 
-    : (conversation?.other_participant?.photos?.[0] || defaultAvatar);
+  const recipientName = who.name;
+  const recipientPhoto = who.photo;
 
   if (conversation?.other_participant?.id) {
     recipientIdRef.current = conversation.other_participant.id;
@@ -280,8 +185,8 @@ export default function ChatDetailScreen() {
   const { mutate: leaveChat, isPending: isLeaving } = useLeaveConversation();
   const { mutate: deleteChat, isPending: isDeleting } = useDeleteConversation();
 
-  const { colors, isDark } = useTheme();
-  const styles = getStyles(colors, isDark);
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   // Refs estáveis para evitar recriar o canal a cada render
   const recipientNameRef = useRef(recipientName);
   const recipientPhotoRef = useRef(recipientPhoto);
@@ -362,16 +267,16 @@ export default function ChatDetailScreen() {
           setCallType(payload.payload.callType || 'voice');
 
           let callerPhoto = payload.payload.callerPhoto || '';
-          if (!callerPhoto || callerPhoto === defaultAvatar) {
+          if (!callerPhoto) {
             try {
               const { data: callerProfile } = await supabase
                 .from('users')
                 .select('photos')
                 .eq('id', payload.payload.callerId)
                 .single();
-              callerPhoto = callerProfile?.photos?.[0] || recipientPhotoRef.current;
+              callerPhoto = callerProfile?.photos?.[0] || recipientPhotoRef.current || '';
             } catch {
-              callerPhoto = recipientPhotoRef.current;
+              callerPhoto = recipientPhotoRef.current || '';
             }
           }
           setIncomingCallerPhoto(callerPhoto);
@@ -861,7 +766,7 @@ export default function ChatDetailScreen() {
     setFacing((prev) => (prev === 'front' ? 'back' : 'front'));
   };
 
-  const { data: messages, isLoading } = useMessages(id as string);
+  const { data: messages, isLoading, isError, refetch: refetchMessages } = useMessages(id as string);
   const { mutate: sendMessage, isPending: isSending } = useSendMessage();
 
   const startRecording = async () => {
@@ -924,7 +829,7 @@ export default function ChatDetailScreen() {
             }, 100);
           },
           onError: (error) => {
-            Alert.alert("Erro ao enviar áudio", error.message);
+            showError('Não foi possível enviar o áudio', error.message);
           }
         });
       }
@@ -939,15 +844,16 @@ export default function ChatDetailScreen() {
   }, [isRecording]);
 
   const handleSendText = () => {
-    if (messageText.trim() === '') return;
-    
+    if (messageText.trim() === '' || isSending) return;
+
     sendMessage({ conversationId: id as string, text: messageText.trim() }, {
       onSuccess: () => {
         setMessageText('');
         setTimeout(() => {
           scrollViewRef.current?.scrollToEnd({ animated: true });
         }, 100);
-      }
+      },
+      onError: () => showError('Mensagem não enviada', 'Confira sua conexão e tente de novo.'),
     });
   };
 
@@ -964,26 +870,26 @@ export default function ChatDetailScreen() {
         if (asset.type === 'video') {
           // duration vem em milissegundos (pode ser null no web; aí o limite de tamanho do servidor vale)
           if (asset.duration && asset.duration > MAX_VIDEO_SECONDS * 1000) {
-            Alert.alert('Vídeo muito longo', `Envie vídeos de até ${MAX_VIDEO_SECONDS} segundos.`);
+            showError('Vídeo muito longo', `Envie vídeos de até ${MAX_VIDEO_SECONDS} segundos.`);
             return;
           }
           sendMessage({ conversationId: id as string, text: '', videoUri: asset.uri }, {
             onSuccess: () => {
               setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
             },
-            onError: (err) => Alert.alert('Erro ao enviar vídeo', err.message)
+            onError: (err) => showError('Não foi possível enviar o vídeo', err.message)
           });
         } else {
           sendMessage({ conversationId: id as string, text: '', imageUri: asset.uri }, {
             onSuccess: () => {
               setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
             },
-            onError: (err) => Alert.alert('Erro ao enviar foto', err.message)
+            onError: (err) => showError('Não foi possível enviar a foto', err.message)
           });
         }
       }
     } catch (err) {
-      Alert.alert('Erro', 'Não foi possível acessar a biblioteca de mídia.');
+      showError('Galeria indisponível', 'Não foi possível acessar suas fotos e vídeos.');
     }
   };
 
@@ -991,7 +897,7 @@ export default function ChatDetailScreen() {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Permissão necessária', 'Conceda permissão de câmera para capturar fotos ou vídeos.');
+        showError('Permissão necessária', 'Permita o acesso à câmera para tirar fotos ou gravar vídeos.');
         return;
       }
 
@@ -1005,22 +911,17 @@ export default function ChatDetailScreen() {
         const asset = result.assets[0];
         if (asset.type === 'video') {
           sendMessage({ conversationId: id as string, text: '', videoUri: asset.uri }, {
-            onError: (err) => Alert.alert('Erro ao enviar vídeo', err.message),
+            onError: (err) => showError('Não foi possível enviar o vídeo', err.message),
           });
         } else {
           sendMessage({ conversationId: id as string, text: '', imageUri: asset.uri }, {
-            onError: (err) => Alert.alert('Erro ao enviar foto', err.message),
+            onError: (err) => showError('Não foi possível enviar a foto', err.message),
           });
         }
       }
     } catch (err) {
-      Alert.alert('Erro', 'Não foi possível abrir a câmera.');
+      showError('Câmera indisponível', 'Não foi possível abrir a câmera.');
     }
-  };
-
-  const formatTime = (dateString: string) => {
-    const d = new Date(dateString);
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   const formatCallDuration = (seconds: number) => {
@@ -1058,252 +959,154 @@ export default function ChatDetailScreen() {
     ? Array.from(new Map(messages.map((m: any) => [m.id, m])).values()) 
     : [];
 
+  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/chat'));
+
   const handleToggleArchive = () => {
     archiveChat({ conversationId: id as string, isArchived: !isArchived }, {
       onSuccess: () => {
         setIsSettingsVisible(false);
-        if (!isArchived) router.back();
-      }
+        if (!isArchived) goBack();
+      },
+      onError: () => showError('Não foi possível arquivar', 'Tente de novo em instantes.'),
     });
   };
 
   const handleToggleMute = () => {
     muteChat({ conversationId: id as string, isMuted: !isMuted }, {
-      onSuccess: () => setIsSettingsVisible(false)
+      onSuccess: () => setIsSettingsVisible(false),
+      onError: () => showError('Não foi possível alterar as notificações', 'Tente de novo em instantes.'),
     });
   };
 
-  const handleDeleteOrLeave = () => {
-    const title = isGroup ? 'Sair do Grupo' : 'Excluir Conversa';
-    const message = isGroup 
-      ? 'Tem certeza que deseja sair deste grupo?' 
-      : 'Tem certeza que deseja excluir esta conversa?';
-
-    const executeAction = () => {
-      if (isGroup) {
-        leaveChat({ conversationId: id as string }, {
-          onSuccess: () => router.replace('/(tabs)/chat')
-        });
-      } else {
-        deleteChat({ conversationId: id as string }, {
-          onSuccess: () => router.replace('/(tabs)/chat')
-        });
-      }
+  const handleDeleteOrLeave = async () => {
+    const ok = await confirmAction(
+      isGroup
+        ? { title: 'Sair do grupo?', message: 'Você deixa de receber as mensagens deste grupo.', confirmLabel: 'Sair', destructive: true }
+        : { title: 'Excluir conversa?', message: 'Ela sai da sua lista e o histórico some para você.', confirmLabel: 'Excluir', destructive: true },
+    );
+    if (!ok) return;
+    const done = {
+      onSuccess: () => router.replace('/(tabs)/chat'),
+      onError: () => showError('Não foi possível concluir', 'Tente de novo em instantes.'),
     };
-
-    if (Platform.OS === 'web') {
-      if (typeof window !== 'undefined' && window.confirm(message)) {
-        executeAction();
-      }
-    } else {
-      Alert.alert(
-        title,
-        message,
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          { 
-            text: isGroup ? 'Sair' : 'Excluir', 
-            style: 'destructive', 
-            onPress: executeAction
-          }
-        ]
-      );
-    }
+    if (isGroup) leaveChat({ conversationId: id as string }, done);
+    else deleteChat({ conversationId: id as string }, done);
   };
 
+  // Linhas da conversa: separador de dia, avisos de chamada e mensagens agrupadas por quem enviou
+  type Row =
+    | { kind: 'day'; key: string; label: string }
+    | { kind: 'call'; key: string; text: string }
+    | { kind: 'msg'; key: string; msg: any; mine: boolean; first: boolean; last: boolean };
+  const rows: Row[] = [];
+  let lastDay = '';
+  let lastMineId: string | null = null;
+  uniqueMessages.forEach((msg: any) => {
+    if (msg.text?.startsWith('[SYS:')) {
+      const text = msg.text.includes('CALL_ENDED') ? 'Chamada encerrada' : msg.text.includes('CALL_REJECTED') ? 'Chamada recusada' : '';
+      if (text) rows.push({ kind: 'call', key: msg.id, text });
+      return;
+    }
+    const day = new Date(msg.created_at).toDateString();
+    if (day !== lastDay) {
+      lastDay = day;
+      rows.push({ kind: 'day', key: `day-${day}`, label: dayLabel(msg.created_at) });
+    }
+    const mine = msg.sender_id === currentUserId;
+    if (mine) lastMineId = msg.id;
+    rows.push({ kind: 'msg', key: msg.id, msg, mine, first: true, last: true });
+  });
+  // Mensagens seguidas da mesma pessoa (até 5 min entre elas) formam um grupo
+  const sameGroup = (a: Row | undefined, b: Row | undefined) =>
+    a?.kind === 'msg' && b?.kind === 'msg' && a.msg.sender_id === b.msg.sender_id &&
+    Math.abs(new Date(b.msg.created_at).getTime() - new Date(a.msg.created_at).getTime()) < 5 * 60_000;
+  rows.forEach((row, i) => {
+    if (row.kind !== 'msg') return;
+    row.first = !sameGroup(rows[i - 1], row);
+    row.last = !sameGroup(row, rows[i + 1]);
+  });
+
+  const subtitle =
+    who.kind === 'group' ? `${conversation?.member_count ?? ''} pessoas`.trim()
+    : who.kind === 'deleted' ? 'Indisponível'
+    : who.kind === 'left' ? 'Saiu da conversa'
+    : undefined;
+  // Chamadas ao vivo dependem de áudio e arquivos nativos; no web elas não funcionam
+  const canCall = Platform.OS !== 'web' && who.kind === 'person';
+
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={[styles.headerLeft, { flex: 1 }]}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ChevronLeft size={28} color={colors.textPrimary} />
-          </TouchableOpacity>
-          <View style={{ width: 36, height: 36, borderRadius: 18, overflow: 'hidden', marginRight: 10 }}>
-            {isDeletedAccount ? (
-              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? '#334155' : '#E2E8F0', justifyContent: 'center', alignItems: 'center' }}>
-                <User size={20} color={isDark ? '#94A3B8' : '#64748B'} />
-              </View>
-            ) : recipientPhoto ? (
-              <Image source={{ uri: recipientPhoto }} style={{ width: 36, height: 36, borderRadius: 18 }} />
-            ) : (
-              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center' }}>
-                <User size={20} color="#FFF" />
-              </View>
-            )}
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle} numberOfLines={1}>{recipientName}</Text>
-            {isDeletedAccount && (
-              <Text style={{ fontSize: 11, color: colors.textMuted }}>Indisponível</Text>
-            )}
-          </View>
-        </View>
-        
-        <View style={styles.headerRight}>
-          {!isDeletedAccount && (
-            <>
-              <TouchableOpacity style={styles.headerIcon} onPress={() => initiateCall('voice')}>
-                <Phone size={20} color={colors.primary} />
+    <View style={styles.container}>
+      <ConversationHeader
+        who={who}
+        subtitle={subtitle}
+        onBack={goBack}
+        onCall={canCall ? () => initiateCall('voice') : undefined}
+        onVideo={canCall ? () => initiateCall('video') : undefined}
+        onMore={conversation ? () => setIsSettingsVisible(true) : undefined}
+      />
+
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.chatArea}
+          contentContainerStyle={styles.chatContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+        >
+          {isLoading ? (
+            <ActivityIndicator size="large" color={colors.primary} accessibilityLabel="Carregando mensagens" />
+          ) : isError && !messages ? (
+            <View style={styles.notice}>
+              <Text style={styles.noticeTitle}>Não conseguimos carregar as mensagens</Text>
+              <TouchableOpacity onPress={() => refetchMessages()} style={styles.noticeBtn} accessibilityRole="button">
+                <Text style={styles.noticeBtnText}>Tentar de novo</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.headerIcon} onPress={() => initiateCall('video')}>
-                <VideoIcon size={20} color={colors.primary} />
-              </TouchableOpacity>
-            </>
-          )}
-          <TouchableOpacity style={styles.headerIcon} onPress={() => setIsSettingsVisible(true)}>
-            <MoreVertical size={20} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Chat Messages */}
-      <ScrollView 
-        ref={scrollViewRef}
-        style={styles.chatArea} 
-        contentContainerStyle={{ padding: spacing.md, justifyContent: 'flex-end', flexGrow: 1 }}
-        onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
-      >
-        {isLoading ? (
-          <ActivityIndicator size="large" color={colors.primary} />
-        ) : uniqueMessages.map((msg: any) => {
-          if (msg.text?.startsWith('[SYS:')) {
-            if (msg.text.includes('CALL_OFFER') || msg.text.includes('CALL_ANSWER')) return null;
-            let sysText = '';
-            if (msg.text.includes('CALL_ENDED')) sysText = '📞 Chamada encerrada';
-            else if (msg.text.includes('CALL_REJECTED')) sysText = '📞 Chamada recusada';
-            
-            if (sysText) {
-              return (
-                <View key={msg.id} style={{ alignItems: 'center', marginVertical: spacing.sm }}>
-                  <View style={{ backgroundColor: isDark ? '#333' : '#F3F4F6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}>
-                    <Text style={{ fontSize: 12, color: colors.textSecondary, fontWeight: '500' }}>{sysText}</Text>
-                  </View>
-                </View>
-              );
-            }
-            return null;
-          }
-
-          const isSender = msg.sender_id === currentUserId;
-          return (
-            <View key={msg.id} style={{ alignItems: isSender ? 'flex-end' : 'flex-start', marginBottom: spacing.md }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={[isSender ? styles.messageBubbleSender : styles.messageBubbleReceiver, { marginBottom: 2 }]}>
-                  {msg.audio_url ? (
-                    <AudioPlayer url={msg.audio_url} isSender={isSender} />
-                  ) : msg.image_url ? (
-                    <View>
-                      <ChatImageItem uri={msg.image_url} onOpen={setSelectedImage} style={styles.chatImage} />
-                      {msg.text && msg.text !== '[Foto]' && (
-                        <Text style={[isSender ? styles.messageTextSender : styles.messageTextReceiver, { marginTop: 6 }]}>
-                          {msg.text}
-                        </Text>
-                      )}
-                    </View>
-                  ) : msg.video_url ? (
-                    <View style={styles.chatVideoContainer}>
-                      <ChatVideoItem uri={msg.video_url} />
-                      {msg.text && msg.text !== '[Vídeo]' && (
-                        <Text style={[isSender ? styles.messageTextSender : styles.messageTextReceiver, { marginTop: 6 }]}>
-                          {msg.text}
-                        </Text>
-                      )}
-                    </View>
-                  ) : (
-                    <View>
-                      <Text style={isSender ? styles.messageTextSender : styles.messageTextReceiver}>{msg.text}</Text>
-                      {translatedMessages[msg.id] && (
-                        <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.1)' }}>
-                          <Text style={[isSender ? styles.messageTextSender : styles.messageTextReceiver, { fontStyle: 'italic' }]}>
-                            {translatedMessages[msg.id]}
-                          </Text>
-                          <Text style={{ fontSize: 10, color: colors.textMuted, marginTop: 4 }}>✨ Traduzido por DeepL</Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-                </View>
-
-                {/* Botão de Traduzir IA para mensagens recebidas em texto */}
-                {!isSender && msg.text && !msg.image_url && !msg.video_url && !msg.audio_url && !translatedMessages[msg.id] && (
-                  <TouchableOpacity 
-                    style={{ marginLeft: 8, padding: 6, backgroundColor: isDark ? '#333' : '#F3E8FF', borderRadius: 16 }}
-                    onPress={() => handleTranslate(msg.id, msg.text)}
-                  >
-                    {translatingId === msg.id ? (
-                      <ActivityIndicator size="small" color={colors.primary} />
-                    ) : (
-                      <Sparkles size={16} color={colors.primary} />
-                    )}
-                  </TouchableOpacity>
-                )}
-              </View>
-              <Text style={{ fontSize: 10, color: colors.textMuted, marginRight: 4, marginLeft: 4 }}>
-                {formatTime(msg.created_at)}
-                {isSender && msg.read_at && ` • Lido ${formatTime(msg.read_at)}`}
-              </Text>
             </View>
-          );
-        })}
-      </ScrollView>
-
-      {/* Input Bar */}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        {isDeletedAccount ? (
-          <View style={[styles.deletedNoticeBar, { backgroundColor: isDark ? '#1E293B' : '#F8FAFC', borderTopColor: colors.border }]}>
-            <Lock size={16} color={colors.textMuted} style={{ marginRight: 8 }} />
-            <Text style={[styles.deletedNoticeText, { color: colors.textMuted }]}>
-              Esta conta foi excluída. Não é possível responder a esta conversa.
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.inputContainer}>
-            {isRecording ? (
-              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.sm }}>
-                <TouchableOpacity onPress={cancelRecording} style={{ padding: 10 }}>
-                  <Trash2 size={24} color="#EF4444" />
-                </TouchableOpacity>
-                
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#EF4444', marginRight: 8, opacity: recordingDuration % 2 === 0 ? 1 : 0.5 }} />
-                  <Text style={{ ...typography.body, color: colors.textPrimary }}>
-                    {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')} / {MAX_AUDIO_SECONDS / 60}:00
-                  </Text>
-                </View>
-                
-                <TouchableOpacity onPress={sendRecording} style={styles.sendButton} disabled={isSending}>
-                  {isSending ? <ActivityIndicator size="small" color="#FFF" /> : <Send size={20} color="#FFF" />}
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <>
-                <TouchableOpacity onPress={handlePickMedia} style={styles.attachButton}>
-                  <ImageIcon size={22} color={colors.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleTakePhoto} style={styles.attachButton}>
-                  <Camera size={22} color={colors.textSecondary} />
-                </TouchableOpacity>
-                <TextInput 
-                  style={styles.textInput} 
-                  placeholder="Digite sua mensagem..."
-                  placeholderTextColor={colors.textMuted}
-                  value={messageText}
-                  onChangeText={setMessageText}
-                  onSubmitEditing={handleSendText}
+          ) : rows.length === 0 ? (
+            <View style={styles.notice}>
+              <Text style={styles.noticeTitle}>{isLocked ? 'Nenhuma mensagem' : 'Comece a conversa'}</Text>
+              {!isLocked && <Text style={styles.noticeText}>{`Mande a primeira mensagem para ${who.name.split(' ')[0]}.`}</Text>}
+            </View>
+          ) : (
+            rows.map((row) => {
+              if (row.kind === 'day') return <DaySeparator key={row.key} label={row.label} />;
+              if (row.kind === 'call') return <CallNote key={row.key} text={row.text} />;
+              return (
+                <MessageBubble
+                  key={row.key}
+                  msg={row.msg}
+                  mine={row.mine}
+                  firstInGroup={row.first}
+                  lastInGroup={row.last}
+                  showRead={row.msg.id === lastMineId && !!row.msg.read_at}
+                  translation={translatedMessages[row.msg.id]}
+                  translating={translatingId === row.msg.id}
+                  onTranslate={() => handleTranslate(row.msg.id, row.msg.text)}
+                  onOpenImage={setSelectedImage}
                 />
-                {messageText.trim().length > 0 ? (
-                  <TouchableOpacity style={styles.sendButton} onPress={handleSendText} disabled={isSending}>
-                    {isSending ? <ActivityIndicator size="small" color="#FFF" /> : <Send size={20} color="#FFF" />}
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity style={styles.micButton} onPress={startRecording}>
-                    <Mic size={22} color="#FFF" />
-                  </TouchableOpacity>
-                )}
-              </>
-            )}
-          </View>
+              );
+            })
+          )}
+        </ScrollView>
+
+        {isLocked ? (
+          <LockedBar text={isDeletedAccount ? 'Esta conta foi excluída. Não é possível responder a esta conversa.' : 'Esta pessoa saiu da conversa. Não é possível responder.'} />
+        ) : (
+          <Composer
+            value={messageText}
+            onChange={setMessageText}
+            onSend={handleSendText}
+            sending={isSending}
+            recording={isRecording}
+            seconds={recordingDuration}
+            maxSeconds={MAX_AUDIO_SECONDS}
+            onPickMedia={handlePickMedia}
+            onTakePhoto={handleTakePhoto}
+            onStartRecording={startRecording}
+            onCancelRecording={cancelRecording}
+            onSendRecording={sendRecording}
+          />
         )}
       </KeyboardAvoidingView>
 
@@ -1314,7 +1117,7 @@ export default function ChatDetailScreen() {
           {callState === 'incoming' && (
             <View style={styles.callCenterContent}>
               <View style={styles.avatarPulseRing}>
-                <Image source={{ uri: incomingCallerPhoto || recipientPhoto }} style={styles.callAvatar} />
+                <CallPhoto uri={incomingCallerPhoto || recipientPhoto} name={incomingCallerName || recipientName} size={120} style={styles.callAvatar} />
               </View>
               <Text style={styles.callerNameText}>{incomingCallerName || recipientName}</Text>
               <Text style={styles.callStateText}>
@@ -1336,7 +1139,7 @@ export default function ChatDetailScreen() {
           {callState === 'calling' && (
             <View style={styles.callCenterContent}>
               <View style={styles.avatarPulseRing}>
-                <Image source={{ uri: recipientPhoto }} style={styles.callAvatar} />
+                <CallPhoto uri={recipientPhoto} name={recipientName} size={120} style={styles.callAvatar} />
               </View>
               <Text style={styles.callerNameText}>{recipientName}</Text>
               <Text style={styles.callStateText}>Chamando...</Text>
@@ -1358,7 +1161,7 @@ export default function ChatDetailScreen() {
                     <Image source={{ uri: remoteVideoFrame }} style={styles.videoStreamOverlay} resizeMode="cover" />
                   ) : (
                     <View style={styles.videoPlaceholderBackground}>
-                      <Image source={{ uri: recipientPhoto }} style={styles.videoAvatarCenter} />
+                      <CallPhoto uri={recipientPhoto} name={recipientName} size={110} style={styles.videoAvatarCenter} />
                       <Text style={styles.videoWaitingText}>Aguardando vídeo de {recipientName}...</Text>
                     </View>
                   )}
@@ -1388,7 +1191,7 @@ export default function ChatDetailScreen() {
                 </View>
               ) : (
                 <View style={styles.audioCallCenter}>
-                  <Image source={{ uri: recipientPhoto }} style={styles.callAvatarLarge} />
+                  <CallPhoto uri={recipientPhoto} name={recipientName} size={130} style={styles.callAvatarLarge} />
                   <Text style={styles.callerNameText}>{recipientName}</Text>
                   <Text style={styles.callTimerText}>{formatCallDuration(callTimer)}</Text>
                 </View>
@@ -1437,225 +1240,43 @@ export default function ChatDetailScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* Full-screen Image Preview Modal */}
-      <Modal visible={!!selectedImage} animationType="fade" transparent={true}>
-        <View style={styles.imageViewerOverlay}>
-          <TouchableOpacity style={styles.imageViewerClose} onPress={() => setSelectedImage(null)}>
-            <X size={28} color="#FFF" />
-          </TouchableOpacity>
-          {selectedImage && (
-            <Image source={{ uri: selectedImage }} style={styles.fullScreenImage} resizeMode="contain" />
-          )}
-        </View>
-      </Modal>
+      <ImageViewer uri={selectedImage} onClose={() => setSelectedImage(null)} />
 
-      {/* Settings Modal */}
-      <Modal visible={isSettingsVisible} animationType="fade" transparent={true}>
-        <View style={styles.settingsOverlay}>
-          <TouchableOpacity style={{ flex: 1 }} onPress={() => setIsSettingsVisible(false)} />
-          <View style={styles.settingsContent}>
-            <View style={styles.dragHandle} />
-            <View style={styles.settingsHeader}>
-              <Text style={styles.settingsTitle}>Gerenciar Chat</Text>
-            </View>
-
-            <TouchableOpacity style={styles.actionRow} onPress={handleToggleArchive} disabled={isArchiving}>
-              <View style={styles.actionIconContainer}>
-                <Archive size={22} color={colors.textPrimary} />
-              </View>
-              <Text style={styles.actionText}>{isArchived ? 'Desarquivar' : 'Arquivar'}</Text>
-              {isArchiving && <ActivityIndicator color={colors.textPrimary} style={{ marginLeft: 'auto' }} />}
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.actionRow} onPress={handleToggleMute} disabled={isMuting}>
-              <View style={styles.actionIconContainer}>
-                <BellOff size={22} color={colors.textPrimary} />
-              </View>
-              <Text style={styles.actionText}>{isMuted ? 'Ativar Notificações' : 'Silenciar'}</Text>
-              {isMuting && <ActivityIndicator color={colors.textPrimary} style={{ marginLeft: 'auto' }} />}
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.actionRow, { borderBottomWidth: 0 }]} onPress={handleDeleteOrLeave} disabled={isDeleting || isLeaving}>
-              <View style={[styles.actionIconContainer, { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEE2E2' }]}>
-                {isGroup ? <LogOut size={22} color="#EF4444" /> : <Trash2 size={22} color="#EF4444" />}
-              </View>
-              <Text style={[styles.actionText, { color: '#EF4444' }]}>
-                {isGroup ? 'Sair do Grupo' : 'Excluir Conversa'}
-              </Text>
-              {(isDeleting || isLeaving) && <ActivityIndicator color="#EF4444" style={{ marginLeft: 'auto' }} />}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+      <ChatActionsSheet
+        chat={isSettingsVisible && conversation ? conversation : null}
+        onClose={() => setIsSettingsVisible(false)}
+        onArchive={handleToggleArchive}
+        onMute={handleToggleMute}
+        onLeave={handleDeleteOrLeave}
+        busy={isArchiving || isMuting || isLeaving || isDeleting}
+      />
+    </View>
   );
 }
 
-const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.sm,
-    paddingTop: Platform.OS === 'android' ? 40 : 10,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  backButton: {
-    padding: spacing.xs,
-    marginRight: spacing.xs,
-  },
-  headerTitle: {
-    ...typography.h3,
-    color: colors.textPrimary,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingRight: spacing.md,
-  },
-  headerIcon: {
-    padding: spacing.xs,
-  },
   chatArea: {
     flex: 1,
-    backgroundColor: isDark ? colors.background : '#F9FAFB',
-  },
-  messageBubbleReceiver: {
-    backgroundColor: colors.surface,
-    padding: spacing.md,
-    borderRadius: 16,
-    maxWidth: '80%',
-  },
-  messageBubbleSender: {
-    backgroundColor: colors.primary,
-    padding: spacing.md,
-    borderRadius: 16,
-    maxWidth: '80%',
-  },
-  messageTextReceiver: {
-    ...typography.body,
-    color: colors.textPrimary,
-  },
-  messageTextSender: {
-    ...typography.body,
-    color: '#FFFFFF',
-  },
-  chatImage: {
-    width: 220,
-    height: 180,
-    borderRadius: 12,
-  },
-  chatVideoContainer: {
-    width: 230,
-    height: 170,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#000',
-  },
-  chatVideo: {
-    width: '100%',
-    height: '100%',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
     backgroundColor: colors.background,
-    gap: 6,
   },
-  attachButton: {
-    padding: 8,
-  },
-  textInput: {
-    flex: 1,
-    minWidth: 0, // no web o <input> tem largura mínima própria e empurra os botões para fora da tela
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    paddingHorizontal: spacing.md,
-    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
-    color: colors.textPrimary,
-    maxHeight: 100,
-  },
-  sendButton: {
-    backgroundColor: colors.primary,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  micButton: {
-    backgroundColor: colors.primary,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  settingsOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  chatContent: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    flexGrow: 1,
     justifyContent: 'flex-end',
-  },
-  settingsContent: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: spacing.lg,
-    paddingBottom: Platform.OS === 'ios' ? 40 : spacing.lg,
-  },
-  dragHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: colors.border,
-    borderRadius: 2,
+    width: '100%',
+    maxWidth: 720,
     alignSelf: 'center',
-    marginBottom: spacing.md,
   },
-  settingsHeader: {
-    marginBottom: spacing.md,
-  },
-  settingsTitle: {
-    ...typography.h3,
-    color: colors.textPrimary,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  actionIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: spacing.md,
-  },
-  actionText: {
-    ...typography.body,
-    color: colors.textPrimary,
-    fontWeight: '500',
-  },
+  notice: { alignItems: 'center', gap: 8, paddingVertical: 48, paddingHorizontal: 24 },
+  noticeTitle: { fontSize: 17, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
+  noticeText: { fontSize: 15, lineHeight: 21, color: colors.textSecondary, textAlign: 'center' },
+  noticeBtn: { height: 48, paddingHorizontal: 22, borderRadius: 16, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  noticeBtnText: { fontSize: 16, fontWeight: '700', color: colors.primary },
   // Call Screen Styles
   callContainer: {
     flex: 1,
@@ -1803,23 +1424,6 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  imageViewerOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.95)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  imageViewerClose: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    zIndex: 10,
-    padding: 10,
-  },
-  fullScreenImage: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT * 0.8,
-  },
   permissionPromptCorner: {
     flex: 1,
     backgroundColor: '#334155',
@@ -1832,19 +1436,6 @@ const getStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     marginTop: 2,
-    textAlign: 'center',
-  },
-  deletedNoticeBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 18,
-    paddingHorizontal: spacing.lg,
-    borderTopWidth: 1,
-  },
-  deletedNoticeText: {
-    fontSize: 13,
-    fontWeight: '500',
     textAlign: 'center',
   },
 });

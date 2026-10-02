@@ -86,8 +86,8 @@ const skeletonStyles = StyleSheet.create({
   chatRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     gap: 14,
   },
   chatLines: {

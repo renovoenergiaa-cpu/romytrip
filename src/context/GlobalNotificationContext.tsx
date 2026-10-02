@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 
 export interface IncomingCall {
@@ -41,6 +42,7 @@ const GlobalNotificationContext = createContext<GlobalNotificationContextType>({
 export const useGlobalNotification = () => useContext(GlobalNotificationContext);
 
 export function GlobalNotificationProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
   const [messageBanner, setMessageBanner] = useState<InAppBanner | null>(null);
   const [activeConversationId, setActiveConversationIdState] = useState<string | null>(null);
@@ -151,6 +153,9 @@ export function GlobalNotificationProvider({ children }: { children: React.React
       const handleNewMessage = async (payload: any) => {
         if (isCancelled || !mountedRef.current) return;
         const newMsg = payload.new as any;
+
+        // Lista de conversas e contador da aba Chat acompanham toda mensagem nova
+        queryClient.invalidateQueries({ queryKey: ['conversations'] });
 
         if (newMsg.text?.startsWith('[SYS:CALL_OFFER]')) {
           try {

@@ -1,18 +1,30 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { supabaseUrl, supabaseAnonKey } from '../lib/supabase';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { sendPushNotification } from '../services/notifications';
+export interface ConversationLastMessage {
+  text: string;
+  created_at: string;
+  sender_id: string;
+  audio_url?: string | null;
+  image_url?: string | null;
+  video_url?: string | null;
+  sender?: { name?: string | null } | null;
+}
+
 export interface Conversation {
   id: string;
   is_group: boolean;
   name: string | null;
   created_at: string;
-  other_participant?: any;
-  last_message?: any;
+  other_participant?: { id: string; name: string | null; photos: string[] | null } | null;
+  /** Quantas pessoas há na conversa, você incluído (útil em grupos). */
+  member_count: number;
+  last_message?: ConversationLastMessage | null;
   unread_count?: number;
   is_archived?: boolean;
   is_muted?: boolean;
@@ -31,89 +43,91 @@ export interface Message {
   sender?: any;
 }
 
-export const useCurrentUserId = () => {
-  const [userId, setUserId] = useState<string | null>(null);
-  
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data?.user) setUserId(data.user.id);
-    });
-    
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      setUserId(session?.user?.id || null);
-    });
-    
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-  }, []);
-  
-  return userId;
-};
+// A sessão já vem do AuthContext: sem consulta extra ao servidor a cada tela.
+export const useCurrentUserId = () => useAuth().session?.user?.id ?? null;
 
 export const useConversations = () => {
   const userId = useCurrentUserId();
 
   return useQuery({
     queryKey: ['conversations', userId],
-    queryFn: async () => {
+    queryFn: async (): Promise<Conversation[]> => {
       if (!userId) return [];
 
-      // 1. Fetch participants where the user is present
       const { data: myParticipants, error: partErr } = await supabase
         .from('conversation_participants')
         .select('conversation_id, is_archived, is_muted')
         .eq('user_id', userId);
-        
       if (partErr) throw partErr;
       if (!myParticipants || myParticipants.length === 0) return [];
-      
-      const convIds = myParticipants.map(p => p.conversation_id);
 
-      // 2. Fetch the conversations
-      const { data: convData, error: convErr } = await supabase
-        .from('conversations')
-        .select('*')
-        .in('id', convIds)
-        .order('created_at', { ascending: false });
+      const convIds = myParticipants.map((p) => p.conversation_id);
 
-      if (convErr) throw convErr;
+      const [convRes, partsRes, unreadRes, lastRes] = await Promise.all([
+        supabase.from('conversations').select('*').in('id', convIds),
+        // Os outros participantes (nome e foto aparecem na lista)
+        supabase
+          .from('conversation_participants')
+          .select('conversation_id, users(id, name, photos)')
+          .in('conversation_id', convIds)
+          .neq('user_id', userId),
+        // Só as não lidas, sem as mensagens de sistema das chamadas
+        supabase
+          .from('messages')
+          .select('conversation_id')
+          .in('conversation_id', convIds)
+          .is('read_at', null)
+          .neq('sender_id', userId)
+          .not('text', 'like', '[SYS:%'),
+        // Última mensagem de cada conversa: uma busca de 1 linha cada, em vez de baixar todo o histórico
+        Promise.all(
+          convIds.map((id) =>
+            supabase
+              .from('messages')
+              .select('conversation_id, text, created_at, sender_id, audio_url, image_url, video_url, sender:users(name)')
+              .eq('conversation_id', id)
+              .order('created_at', { ascending: false })
+              .limit(1),
+          ),
+        ),
+      ]);
 
-      // 3. Fetch other participants info (for 1-on-1 chats)
-      const { data: allParticipants, error: allPartErr } = await supabase
-        .from('conversation_participants')
-        .select('conversation_id, users(id, name, photos)')
-        .in('conversation_id', convIds)
-        .neq('user_id', userId);
-        
-      // 4. Fetch latest message for each conversation
-      const { data: messages, error: msgErr } = await supabase
-        .from('messages')
-        .select('conversation_id, text, created_at, read_at, sender_id')
-        .in('conversation_id', convIds)
-        .order('created_at', { ascending: false });
-        
-      // 5. Map everything
-      return convData.map(conv => {
-        const otherParticipant = allParticipants?.find(p => p.conversation_id === conv.id)?.users;
-        const convMessages = messages?.filter(m => m.conversation_id === conv.id) || [];
-        const lastMessage = convMessages.length > 0 ? convMessages[0] : null;
-        const unreadCount = convMessages.filter(m => m.read_at === null && m.sender_id !== userId).length;
-        const myPart = myParticipants?.find(p => p.conversation_id === conv.id);
-        
-        return {
-          ...conv,
-          other_participant: otherParticipant,
-          last_message: lastMessage,
-          unread_count: unreadCount,
-          is_archived: myPart?.is_archived || false,
-          is_muted: myPart?.is_muted || false,
-        };
-      }).sort((a, b) => {
-        const timeA = a.last_message ? new Date(a.last_message.created_at).getTime() : new Date(a.created_at).getTime();
-        const timeB = b.last_message ? new Date(b.last_message.created_at).getTime() : new Date(b.created_at).getTime();
-        return timeB - timeA;
+      // Erro aqui não pode virar "nenhuma conversa": a tela mostra o erro e deixa tentar de novo
+      if (convRes.error) throw convRes.error;
+      if (partsRes.error) throw partsRes.error;
+      if (unreadRes.error) throw unreadRes.error;
+
+      const unreadByConv = new Map<string, number>();
+      (unreadRes.data ?? []).forEach((m: any) => {
+        unreadByConv.set(m.conversation_id, (unreadByConv.get(m.conversation_id) ?? 0) + 1);
       });
+
+      const lastByConv = new Map<string, ConversationLastMessage>();
+      lastRes.forEach((res) => {
+        if (res.error) console.warn('Erro ao buscar a última mensagem:', res.error);
+        const row: any = res.data?.[0];
+        if (row) lastByConv.set(row.conversation_id, row);
+      });
+
+      return (convRes.data ?? [])
+        .map((conv: any): Conversation => {
+          const others = (partsRes.data ?? []).filter((p: any) => p.conversation_id === conv.id);
+          const myPart = myParticipants.find((p) => p.conversation_id === conv.id);
+          return {
+            ...conv,
+            other_participant: (others[0] as any)?.users ?? null,
+            member_count: others.length + 1,
+            last_message: lastByConv.get(conv.id) ?? null,
+            unread_count: unreadByConv.get(conv.id) ?? 0,
+            is_archived: myPart?.is_archived || false,
+            is_muted: myPart?.is_muted || false,
+          };
+        })
+        .sort((a, b) => {
+          const timeA = new Date(a.last_message?.created_at ?? a.created_at).getTime();
+          const timeB = new Date(b.last_message?.created_at ?? b.created_at).getTime();
+          return timeB - timeA;
+        });
     },
     enabled: !!userId,
   });
@@ -183,6 +197,24 @@ export const useMessages = (conversationId: string) => {
   return query;
 };
 
+// Lê a mídia escolhida. No web o seletor devolve um blob: URL (sem extensão) e o expo-file-system não existe lá.
+async function readPickedMedia(uri: string, kind: 'image' | 'video') {
+  const fallbackExt = kind === 'image' ? 'jpg' : 'mp4';
+  if (Platform.OS === 'web') {
+    const blob = await (await fetch(uri)).blob();
+    const contentType = blob.type || (kind === 'image' ? 'image/jpeg' : 'video/mp4');
+    const fileExt =
+      (contentType.split('/')[1] ?? '').replace('jpeg', 'jpg').replace('quicktime', 'mov').replace(/[^a-z0-9]/g, '') || fallbackExt;
+    return { body: await blob.arrayBuffer(), fileExt, contentType };
+  }
+  // Remove ?query do URI antes de pegar a extensão (no iOS vem com ?token=...)
+  const rawExt = uri.split('?')[0].split('.').pop() || fallbackExt;
+  const fileExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, '') || fallbackExt;
+  const body = decode(await FileSystem.readAsStringAsync(uri, { encoding: 'base64' }));
+  const contentType = kind === 'image' ? (fileExt === 'png' ? 'image/png' : 'image/jpeg') : 'video/mp4';
+  return { body, fileExt, contentType };
+}
+
 export const useSendMessage = () => {
   const queryClient = useQueryClient();
 
@@ -238,18 +270,13 @@ export const useSendMessage = () => {
       }
 
       if (imageUri) {
-        // Strip query params from URI before extracting extension (iOS URIs can have ?token=...)
-        const cleanImageUri = imageUri.split('?')[0];
-        const rawExt = cleanImageUri.split('.').pop() || 'jpg';
-        const fileExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+        const { body, fileExt, contentType } = await readPickedMedia(imageUri, 'image');
         const fileName = `${userId}/img_${Date.now()}.${fileExt}`;
-        const base64File = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' });
-        const contentType = fileExt === 'png' ? 'image/png' : 'image/jpeg';
 
         // 🔒 N-05 Fix: images go to 'chat_images' bucket, not 'chat_audio'
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from('chat_images')
-          .upload(fileName, decode(base64File), { contentType, upsert: true });
+          .upload(fileName, body, { contentType, upsert: true });
 
         if (!uploadErr && uploadData) finalImageUrl = `chat_images/${uploadData.path}`;
         // Sem fallback para o URI local: ele só existe no aparelho de quem enviou
@@ -257,16 +284,13 @@ export const useSendMessage = () => {
       }
 
       if (videoUri) {
-        const cleanVideoUri = videoUri.split('?')[0];
-        const rawExt = cleanVideoUri.split('.').pop() || 'mp4';
-        const fileExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
+        const { body, fileExt, contentType } = await readPickedMedia(videoUri, 'video');
         const fileName = `${userId}/vid_${Date.now()}.${fileExt}`;
-        const base64File = await FileSystem.readAsStringAsync(videoUri, { encoding: 'base64' });
 
         // 🔒 N-05 Fix: videos go to 'chat_videos' bucket, not 'chat_audio'
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from('chat_videos')
-          .upload(fileName, decode(base64File), { contentType: 'video/mp4', upsert: true });
+          .upload(fileName, body, { contentType, upsert: true });
 
         if (!uploadErr && uploadData) finalVideoUrl = `chat_videos/${uploadData.path}`;
         // Falha típica: vídeo acima do limite de 50 MB do bucket
