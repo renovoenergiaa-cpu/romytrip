@@ -1,18 +1,23 @@
 import { Redirect } from 'expo-router';
 import { useAuth } from '../src/context/AuthContext';
-import { View, ActivityIndicator } from 'react-native';
-import { colors } from '../src/theme';
+import { supabase } from '../src/lib/supabase';
+import { BootSpinner, ConnectionError } from '../src/components/AuthStates';
 
 export default function Index() {
-  const { session, isLoading, isProfileComplete } = useAuth();
+  const { session, isLoading, isProfileComplete, loadError, retry } = useAuth();
 
-  if (isLoading || (session && isProfileComplete === null)) {
+  // Sem conexão não é "deslogado" nem "cadastro incompleto": pede para tentar de novo.
+  if (loadError) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
+      <ConnectionError
+        retrying={isLoading}
+        onRetry={retry}
+        onSignOut={session ? () => { supabase.auth.signOut().catch(() => {}); } : undefined}
+      />
     );
   }
+
+  if (isLoading || (session && isProfileComplete === null)) return <BootSpinner />;
 
   if (!session) {
     return <Redirect href="/(auth)/login" />;
@@ -24,4 +29,3 @@ export default function Index() {
 
   return <Redirect href="/(tabs)" />;
 }
-

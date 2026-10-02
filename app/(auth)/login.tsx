@@ -97,11 +97,8 @@ export default function LoginScreen() {
         setLoading(false);
       } else if (data.user) {
         const complete = await checkProfileComplete(data.user.id);
-        if (complete) {
-          router.replace('/(tabs)');
-        } else {
-          router.replace('/(auth)/onboarding/step1-personal');
-        }
+        // null = não deu para verificar: a tela inicial decide (e pede para tentar de novo)
+        router.replace(complete === null ? '/' : complete ? '/(tabs)' : '/(auth)/onboarding/step1-personal');
       }
     } catch (err: any) {
       showAlert('Erro', translateAuthError(err));
@@ -244,7 +241,9 @@ export default function LoginScreen() {
             if (exchangeError) throw exchangeError;
             if (sessionData?.user) {
               const complete = await checkProfileComplete(sessionData.user.id);
-              if (complete) {
+              if (complete === null) {
+                router.replace('/');
+              } else if (complete) {
                 router.replace('/(tabs)');
               } else {
                 const fullName = sessionData.user.user_metadata?.full_name || sessionData.user.user_metadata?.name;
@@ -273,7 +272,9 @@ export default function LoginScreen() {
               if (sessionError) throw sessionError;
               if (sessionData?.user) {
                 const complete = await checkProfileComplete(sessionData.user.id);
-                if (complete) {
+                if (complete === null) {
+                  router.replace('/');
+                } else if (complete) {
                   router.replace('/(tabs)');
                 } else {
                   const fullName = sessionData.user.user_metadata?.full_name || sessionData.user.user_metadata?.name;

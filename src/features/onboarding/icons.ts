@@ -56,3 +56,4 @@ export { PlusIcon as Plus } from 'phosphor-react-native/src/icons/Plus';
 export { CalendarBlankIcon as CalendarBlank } from 'phosphor-react-native/src/icons/CalendarBlank';
 export { ImagesIcon as Images } from 'phosphor-react-native/src/icons/Images';
 export { ArrowRightIcon as ArrowRight } from 'phosphor-react-native/src/icons/ArrowRight';
+export { WifiSlashIcon as WifiSlash } from 'phosphor-react-native/src/icons/WifiSlash';

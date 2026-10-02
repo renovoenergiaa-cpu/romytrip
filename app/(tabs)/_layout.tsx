@@ -1,29 +1,25 @@
 import { Tabs, Redirect, useRouter } from 'expo-router';
 import { Home, Users, MessageCircle, User, Plus } from 'lucide-react-native';
-import { StyleSheet, View, DeviceEventEmitter, Platform, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, DeviceEventEmitter, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { brandGradient, useTheme } from '../../src/theme';
 import { useConversations } from '../../src/hooks/useMessenger';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
+import { BootSpinner, ConnectionError } from '../../src/components/AuthStates';
 
 export default function TabLayout() {
   const router = useRouter();
-  const { session, isLoading } = useAuth();
+  const { session, isLoading, loadError, retry } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { data: conversations } = useConversations();
   const unreadCount = conversations?.reduce((acc, curr) => acc + (curr.unread_count || 0), 0) || 0;
 
-  if (isLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
   if (!session) {
+    if (isLoading && !loadError) return <BootSpinner />;
+    // Sessão salva que não deu para renovar sem internet: não é logout.
+    if (loadError) return <ConnectionError retrying={isLoading} onRetry={retry} />;
     return <Redirect href="/(auth)/login" />;
   }
 
