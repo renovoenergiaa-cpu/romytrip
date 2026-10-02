@@ -1,366 +1,83 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { useMemo } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { CheckCircle2, Shield, Eye, EyeOff, Sparkles, Filter, Zap, TrendingUp, X, Crown, ChevronRight } from 'lucide-react-native';
-import { colors, spacing, typography } from '../../src/theme';
-import { supabase } from '../../src/lib/supabase';
-import { useAuth } from '../../src/context/AuthContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme, type ThemeColors } from '../../src/theme';
+import { Crown, Translate, X } from '../../src/features/onboarding/icons';
 
+// Ainda não há pagamento: a tela só avisa que o Premium vem aí. Nada de preço, selo ou recurso inventado.
 export default function PaywallScreen() {
   const router = useRouter();
-  const { session } = useAuth();
-  const [loading, setLoading] = useState<string | null>(null);
-  const [selectedPlan, setSelectedPlan] = useState<'premium' | 'gold'>('premium');
+  const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const s = useMemo(() => getStyles(colors), [colors]);
 
-  const handleSubscribe = async (plan: 'premium' | 'gold') => {
-    if (!session?.user?.id) {
-      Alert.alert('Erro', 'Usuário não autenticado.');
-      return;
-    }
-
-    setLoading(plan);
-    try {
-      // Atualiza o plano no banco de dados
-      const { error } = await supabase
-        .from('users')
-        .update({ plan: plan })
-        .eq('id', session.user.id);
-
-      if (error) throw error;
-
-      Alert.alert(
-        'Sucesso!', 
-        `Você agora é um assinante ${plan === 'gold' ? 'Gold' : 'Premium'}! 🎉\nObrigado por apoiar a comunidade.`,
-        [{ text: 'Começar a aproveitar', onPress: () => router.back() }]
-      );
-    } catch (err: any) {
-      Alert.alert('Erro', 'Falha ao atualizar assinatura: ' + err.message);
-    } finally {
-      setLoading(null);
-    }
-  };
+  const close = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/profile'));
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
-          <X size={24} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Escolha seu Plano</Text>
-        <View style={{ width: 40 }} />
+    <View style={[s.screen, { paddingTop: insets.top + 12, paddingBottom: Math.max(insets.bottom, 12) + 4 }]}>
+      <View style={s.topBar}>
+        <Pressable onPress={close} hitSlop={8} accessibilityRole="button" accessibilityLabel="Fechar" style={({ pressed }) => [s.closeBtn, pressed && s.pressed]}>
+          <X size={22} weight="bold" color={colors.textPrimary} />
+        </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        
-        {/* PREMIUM CARD */}
-        <View style={[styles.card, selectedPlan === 'premium' && styles.cardSelected]}>
-          {selectedPlan === 'premium' && (
-            <View style={styles.popularBadge}>
-              <Text style={styles.popularBadgeText}>MAIS POPULAR</Text>
-            </View>
-          )}
-          
-          <TouchableOpacity 
-            style={styles.cardHeader} 
-            activeOpacity={0.8}
-            onPress={() => setSelectedPlan('premium')}
-          >
-            <View>
-              <View style={styles.planTitleRow}>
-                <Sparkles size={24} color={colors.primary} />
-                <Text style={styles.planTitle}>Premium</Text>
-              </View>
-              <Text style={styles.planSubtitle}>Maximize suas conexões e viagens</Text>
-            </View>
-            <View style={styles.priceContainer}>
-              <Text style={styles.priceText}>R$ 29,90</Text>
-              <Text style={styles.priceSubtitle}>/mês</Text>
-            </View>
-          </TouchableOpacity>
+      <View style={s.body}>
+        <LinearGradient colors={[colors.primary, colors.accent]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.crown}>
+          <Crown size={44} weight="fill" color="#FFFFFF" />
+        </LinearGradient>
 
-          <View style={styles.featureList}>
-            <FeatureItem text="Conexões ilimitadas" />
-            <FeatureItem text="Curtir perfis" />
-            <FeatureItem text="Conexões prioritárias" />
-            <FeatureItem text="Ver quem curtiu você" />
-            <FeatureItem text="Modo invisível" />
-            <FeatureItem text="5 badges exclusivos Premium" />
-            <FeatureItem text="Filtros avançados de viagem" />
-            <FeatureItem text="3 boosts por mês" />
-            <FeatureItem text="Destaque no feed por 30min/dia" />
-            <FeatureItem text="Tradução de IA simultânea no chat" highlight />
+        <View style={s.soon}><Text style={s.soonText}>Em breve</Text></View>
+        <Text style={s.title} accessibilityRole="header">Romy Premium</Text>
+        <Text style={s.text}>
+          Estamos preparando um plano para quem viaja muito e quer mais do Romy. Assim que ficar pronto, você vê por aqui.
+        </Text>
+
+        <View style={s.card}>
+          <View style={s.cardIcon}><Translate size={24} weight="duotone" color={colors.primary} /></View>
+          <View style={s.cardTexts}>
+            <Text style={s.cardTitle}>Tradução com IA nas conversas</Text>
+            <Text style={s.cardText}>Por enquanto ela está liberada para todo mundo. Toque em Traduzir numa mensagem recebida.</Text>
           </View>
-
-          <TouchableOpacity 
-            style={[styles.subscribeButton, { backgroundColor: colors.primary }]}
-            onPress={() => handleSubscribe('premium')}
-            disabled={!!loading}
-          >
-            {loading === 'premium' ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <Text style={styles.subscribeButtonText}>Assinar Agora</Text>
-            )}
-          </TouchableOpacity>
         </View>
+      </View>
 
-        {/* GOLD CARD */}
-        <View style={[styles.card, styles.goldCard, selectedPlan === 'gold' && styles.goldCardSelected]}>
-          <TouchableOpacity 
-            style={styles.cardHeader} 
-            activeOpacity={0.8}
-            onPress={() => setSelectedPlan('gold')}
-          >
-            <View>
-              <View style={styles.planTitleRow}>
-                <Crown size={24} color="#F59E0B" />
-                <Text style={styles.planTitle}>Gold</Text>
-              </View>
-              <Text style={styles.planSubtitle}>A experiência completa para viajantes frequentes</Text>
-            </View>
-            <View style={styles.priceContainer}>
-              <Text style={styles.priceText}>R$ 49,90</Text>
-              <Text style={styles.priceSubtitle}>/mês</Text>
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.featureList}>
-            <FeatureItem text="Conexões ilimitadas + Super Likes" gold />
-            <FeatureItem text="Curtir perfis" gold />
-            <FeatureItem text="Conexões prioritárias VIP" gold />
-            <FeatureItem text="Ver quem curtiu + visitou seu perfil" gold />
-            <FeatureItem text="Modo invisível" gold />
-            <FeatureItem text="Todos os badges exclusivos" gold />
-            <FeatureItem text="Filtros avançados + IA de conexões" gold />
-            <FeatureItem text="10 boosts por mês" gold />
-            <FeatureItem text="Destaque permanente no feed" gold />
-            <FeatureItem text="Tradução de IA simultânea ilimitada" highlight gold />
-          </View>
-
-          <TouchableOpacity 
-            style={[styles.subscribeButton, { backgroundColor: '#F59E0B' }]}
-            onPress={() => handleSubscribe('gold')}
-            disabled={!!loading}
-          >
-            {loading === 'gold' ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <Text style={styles.subscribeButtonText}>Selecionar Plano</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* GUARANTEE */}
-        <View style={styles.guaranteeContainer}>
-          <View style={styles.guaranteeHeader}>
-            <Sparkles size={16} color="#F59E0B" />
-            <Text style={styles.guaranteeTitle}>Garantia de 7 dias</Text>
-          </View>
-          <Text style={styles.guaranteeText}>
-            Não ficou satisfeito? Cancele dentro de 7 dias e receba reembolso total. Sem perguntas, sem complicações.
-          </Text>
-        </View>
-
-        {/* FAQ */}
-        <Text style={styles.faqTitle}>Perguntas Frequentes</Text>
-        <FaqItem question="Posso cancelar a qualquer momento?" />
-        <FaqItem question="Os badges ficam para sempre?" />
-        <FaqItem question="Como funcionam os boosts?" />
-
-      </ScrollView>
+      <View style={s.footer}>
+        <Pressable onPress={close} accessibilityRole="button" style={({ pressed }) => [s.cta, pressed && s.pressed]}>
+          <Text style={s.ctaText}>Entendi</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
-function FeatureItem({ text, highlight = false, gold = false }: { text: string, highlight?: boolean, gold?: boolean }) {
-  return (
-    <View style={styles.featureItem}>
-      <CheckCircle2 size={20} color={gold ? '#F59E0B' : '#28A745'} />
-      <Text style={[styles.featureText, highlight && styles.featureTextHighlight]}>{text}</Text>
-    </View>
-  );
-}
-
-function FaqItem({ question }: { question: string }) {
-  return (
-    <TouchableOpacity style={styles.faqItem}>
-      <ChevronRight size={20} color={colors.textPrimary} />
-      <Text style={styles.faqText}>{question}</Text>
-    </TouchableOpacity>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FAFAFA',
+const getStyles = (c: ThemeColors) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.background },
+  pressed: { transform: [{ scale: 0.98 }] },
+  topBar: { paddingHorizontal: 20, alignItems: 'flex-end' },
+  closeBtn: {
+    width: 44, height: 44, borderRadius: 22, backgroundColor: c.card,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, alignItems: 'center', justifyContent: 'center',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingTop: 60,
-    paddingBottom: spacing.md,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  closeButton: {
-    padding: spacing.xs,
-  },
-  headerTitle: {
-    ...typography.h3,
-    color: colors.textPrimary,
-    fontWeight: '700',
-  },
-  content: {
-    padding: spacing.lg,
-    paddingBottom: 60,
-  },
+  body: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, gap: 12, width: '100%', maxWidth: 560, alignSelf: 'center' },
+  crown: { width: 96, height: 96, borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  soon: { height: 28, paddingHorizontal: 14, borderRadius: 14, backgroundColor: c.primarySoft, justifyContent: 'center' },
+  soonText: { fontSize: 13, fontWeight: '700', color: c.primary, letterSpacing: 0.2 },
+  title: { fontSize: 30, fontWeight: '800', color: c.textPrimary, letterSpacing: -0.8, textAlign: 'center' },
+  text: { fontSize: 16, lineHeight: 23, color: c.textSecondary, textAlign: 'center', maxWidth: 340 },
   card: {
-    backgroundColor: '#FFF',
-    borderRadius: 24,
-    padding: spacing.lg,
-    marginBottom: spacing.xl,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 20, marginTop: 12, alignSelf: 'stretch',
+    backgroundColor: c.card, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border,
   },
-  cardSelected: {
-    borderColor: colors.primary,
+  cardIcon: { width: 48, height: 48, borderRadius: 16, backgroundColor: c.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  cardTexts: { flex: 1, gap: 2 },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: c.textPrimary },
+  cardText: { fontSize: 14, lineHeight: 20, color: c.textSecondary },
+  footer: { paddingHorizontal: 20, paddingTop: 12, width: '100%', maxWidth: 560, alignSelf: 'center' },
+  cta: {
+    height: 56, borderRadius: 18, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center',
+    shadowColor: c.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.28, shadowRadius: 12, elevation: 4,
   },
-  goldCard: {
-    backgroundColor: '#FFF9F0', // Levemente amarelado
-  },
-  goldCardSelected: {
-    borderColor: '#F59E0B',
-  },
-  popularBadge: {
-    position: 'absolute',
-    top: -14,
-    alignSelf: 'center',
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 4,
-    borderRadius: 16,
-    zIndex: 10,
-  },
-  popularBadgeText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.lg,
-  },
-  planTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    marginBottom: 4,
-  },
-  planTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.textPrimary,
-  },
-  planSubtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    maxWidth: 180,
-  },
-  priceContainer: {
-    alignItems: 'flex-end',
-  },
-  priceText: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: colors.textPrimary,
-  },
-  priceSubtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  featureList: {
-    gap: 12,
-    marginBottom: spacing.xl,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  featureText: {
-    ...typography.body,
-    color: '#333',
-    flex: 1,
-  },
-  featureTextHighlight: {
-    fontWeight: 'bold',
-    color: colors.primary,
-  },
-  subscribeButton: {
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  subscribeButtonText: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  guaranteeContainer: {
-    backgroundColor: '#F0F6FF',
-    borderRadius: 16,
-    padding: spacing.lg,
-    marginBottom: spacing.xl,
-    borderWidth: 1,
-    borderColor: '#D0E2FF',
-  },
-  guaranteeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  guaranteeTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1E3A8A',
-  },
-  guaranteeText: {
-    fontSize: 14,
-    color: '#3B82F6',
-    lineHeight: 20,
-  },
-  faqTitle: {
-    ...typography.h2,
-    color: colors.textPrimary,
-    marginBottom: spacing.md,
-  },
-  faqItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#FFF',
-    padding: spacing.lg,
-    borderRadius: 16,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  faqText: {
-    ...typography.body,
-    color: colors.textPrimary,
-    fontWeight: '600',
-  }
+  ctaText: { fontSize: 17, fontWeight: '700', color: c.onPrimary, letterSpacing: -0.1 },
 });
