@@ -84,7 +84,9 @@ export default function CommunityScreen() {
 
   const handleJoin = () => {
     if (!community) return;
-    joinCommunity({ communityId: id, groupChatId: community.group_chat_id });
+    joinCommunity({ communityId: id }, {
+      onError: (err) => Alert.alert('Não foi possível entrar na comunidade', err.message),
+    });
   };
 
   const handleUpdateGroupIcon = async () => {

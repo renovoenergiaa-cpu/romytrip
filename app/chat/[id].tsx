@@ -1044,9 +1044,8 @@ export default function ChatDetailScreen() {
         .map((m: any) => m.id);
         
       if (unreadIds.length > 0) {
-        supabase.from('messages')
-          .update({ read_at: new Date().toISOString() })
-          .in('id', unreadIds)
+        // Função no banco: a policy de UPDATE em messages só permite ao remetente alterar
+        supabase.rpc('mark_conversation_read', { p_conversation_id: id as string })
           .then(() => {
             queryClient.invalidateQueries({ queryKey: ['conversations'] });
             queryClient.invalidateQueries({ queryKey: ['messages', id] });

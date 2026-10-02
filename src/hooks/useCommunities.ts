@@ -3,7 +3,6 @@ import { supabase } from '../lib/supabase';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
-import * as Crypto from 'expo-crypto';
 
 export function useCommunities() {
   return useQuery({
@@ -125,50 +124,9 @@ export function useCreateCommunity() {
       color?: string;
       bg_color?: string;
     }) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      // 🔒 VULN-11 Fix: crypto-secure UUID (expo-crypto: o `crypto` global não existe no Hermes/Expo Go)
-      const convId = Crypto.randomUUID();
-
-      // 2. Create the group conversation
-      const { error: convErr } = await supabase
-        .from('conversations')
-        .insert({ id: convId, is_group: true, name: community.title });
-        
-      if (convErr) throw convErr;
-
-      // 3. Add creator to conversation
-      const { error: partErr } = await supabase
-        .from('conversation_participants')
-        .insert({ conversation_id: convId, user_id: user.id });
-        
-      if (partErr) throw partErr;
-
-      // 4. Create Community
-      const { data, error } = await supabase
-        .from('communities')
-        .insert({
-          ...community,
-          created_by: user.id,
-          group_chat_id: convId,
-        })
-        .select()
-        .single();
-
+      // Função no banco: cria comunidade, chat do grupo e o criador como admin de forma atômica
+      const { data, error } = await supabase.rpc('create_community', { p: community });
       if (error) throw error;
-
-      // 5. Add creator as admin member of community
-      const { error: memberErr } = await supabase
-        .from('community_members')
-        .insert({
-          community_id: data.id,
-          user_id: user.id,
-          role: 'admin'
-        });
-
-      if (memberErr) throw memberErr;
-
       return data;
     },
     onSuccess: () => {
@@ -183,29 +141,10 @@ export function useJoinCommunity() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ communityId, groupChatId }: { communityId: string, groupChatId?: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      // 1. Join Community
-      const { error } = await supabase
-        .from('community_members')
-        .insert({
-          community_id: communityId,
-          user_id: user.id,
-          role: 'member'
-        });
-
+    mutationFn: async ({ communityId }: { communityId: string }) => {
+      // Função no banco: entra como membro e no chat do grupo (recusa comunidade Privada)
+      const { error } = await supabase.rpc('join_community', { p_community_id: communityId });
       if (error) throw error;
-
-      // 2. Join Conversation (if exists)
-      if (groupChatId) {
-        // Ignore duplicate key errors if already in conversation
-        await supabase
-          .from('conversation_participants')
-          .insert({ conversation_id: groupChatId, user_id: user.id });
-      }
-
       return { communityId };
     },
     onSuccess: (_, variables) => {
