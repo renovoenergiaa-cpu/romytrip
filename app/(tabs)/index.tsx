@@ -1,1783 +1,601 @@
-import { View, Text, StyleSheet, ImageBackground, TouchableOpacity, SafeAreaView, Platform, FlatList, Dimensions, Share, ActivityIndicator, Modal, TextInput, Alert, Image, KeyboardAvoidingView, ScrollView, DeviceEventEmitter, RefreshControl } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Heart, MessageCircle, Share2, MapPin, Navigation, Plane, UserPlus, BadgeCheck, Plus, X, Send, Camera, Film, Image as ImageIcon, Music, Search, Play, Pause, MessageSquare } from 'lucide-react-native';
-import { createAudioPlayer, AudioModule } from 'expo-audio';
-import { useState, useEffect } from 'react';
-import { BlurView } from 'expo-blur';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, DeviceEventEmitter, FlatList, Platform, Pressable, RefreshControl, Share, StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence, Easing } from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { useFeed, usePostLikes, useTogglePostLike, useCreatePost, useComments, useCreateComment, useDeleteFeedPost, useUpdatePostCaption } from '../../src/hooks/useFeed';
-import { useOnboardingStore } from '../../src/store/onboardingStore';
-import { colors, spacing, typography, useTheme } from '../../src/theme';
-import { useCurrentUserId } from '../../src/hooks/useMessenger';
-import { EmptyState } from '../../src/components/EmptyState';
-
 import { useRouter } from 'expo-router';
-
-import RomyMap from '../../src/components/RomyMap';
-import { useRef } from 'react';
-import { supabase } from '../../src/lib/supabase';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme, type ThemeColors } from '../../src/theme';
+import {
+  useFeed, usePostLikes, useTogglePostLike, useCreatePost, useComments, useCreateComment, useDeleteFeedPost, useUpdatePostCaption,
+} from '../../src/hooks/useFeed';
+import { useOnboardingStore } from '../../src/store/onboardingStore';
+import { useCurrentUserId } from '../../src/hooks/useMessenger';
 import { useLocalEvents } from '../../src/hooks/useEvents';
-import CreateEventModal, { AVAILABLE_EVENT_ICONS } from '../../src/components/CreateEventModal';
+import RomyMap from '../../src/components/RomyMap';
+import CreateEventModal from '../../src/components/CreateEventModal';
 import EventDetailsModal from '../../src/components/EventDetailsModal';
 import CommunitiesScreen from './communities';
-import HelpBoardScreen from '../../app/help-board';
+import HelpBoardScreen from '../help-board';
 import ProximaViagemScreen from '../../src/components/ProximaViagemScreen';
-import FeedPostItem, { FEED_SNAP_HEIGHT, PostItemData } from '../../src/components/FeedPostItem';
-import { UploadProgressBanner, UploadingPostData } from '../../src/components/UploadProgressBanner';
 import PostOptionsSheet from '../../src/components/PostOptionsSheet';
+import { UploadProgressBanner, type UploadingPostData } from '../../src/components/UploadProgressBanner';
+import { showError } from '../../src/lib/dialogs';
+import PostCard, { type PostItemData } from '../../src/features/feed/PostCard';
+import { FeedTabs, FEED_TABS_HEIGHT, type FeedTab } from '../../src/features/feed/FeedTabs';
+import { CommentsSheet, ComposeSheet, EditCaptionSheet, MediaSourceSheet } from '../../src/features/feed/sheets';
+import { useMusicSearch } from '../../src/features/feed/useMusicSearch';
+import { displayName } from '../../src/features/feed/format';
+import { ImageSquare, MapPin, WifiSlash, type Icon } from '../../src/features/onboarding/icons';
 
-const { width, height } = Dimensions.get('window');
-const SNAP_HEIGHT = FEED_SNAP_HEIGHT;
+type UploadPayload = { mediaUri: string; destination: string; description: string; audio_title?: string; audio_url?: string };
 
-interface ITunesSong {
-  trackId: number;
-  trackName: string;
-  artistName: string;
-  previewUrl: string;
-  artworkUrl60: string;
+// Cidade a partir do endereço devolvido pelo serviço de geocodificação
+const extractCityName = (props: any) =>
+  props?.city || props?.town || props?.village || props?.county || props?.municipality || props?.state || '';
+
+// Bairro, cidade e região (não o endereço exato, por privacidade)
+const formatSummarizedLocation = (props: any) => {
+  if (!props) return '';
+  const neighborhood = props.suburb || props.district || props.neighbourhood || props.quarter;
+  const city = props.city || props.town || props.village || props.county;
+  const stateOrCountry = props.state || props.country || '';
+  if (neighborhood && city && neighborhood !== city) return `${neighborhood}, ${city}`;
+  if (city && stateOrCountry) return `${city}, ${stateOrCountry}`;
+  return city || neighborhood || '';
+};
+
+// Endereço de um ponto do mapa (web): rua e número, bairro e cidade
+async function lookupAddress(lat: number, lon: number): Promise<string> {
+  try {
+    const res = await fetch(`https://photon.komoot.io/reverse?lon=${lon}&lat=${lat}`);
+    const props = (await res.json())?.features?.[0]?.properties;
+    if (!props) return 'Local no mapa';
+    const street = props.street ? (props.housenumber ? `${props.street}, ${props.housenumber}` : props.street) : '';
+    const first = props.name && props.name !== props.street ? props.name : street;
+    return [first, props.district || props.suburb, props.city || props.town || props.county].filter(Boolean).join(', ') || 'Local no mapa';
+  } catch {
+    return 'Local no mapa';
+  }
 }
 
 export default function RomyFeedScreen() {
   const router = useRouter();
-  const { colors, isDark } = useTheme();
-  const [activeTab, setActiveTab] = useState<'aqui' | 'rolando' | 'comunidades' | 'proximo' | 'ajudinha'>('aqui');
-  const { destination: userNextDestination } = useOnboardingStore();
-  
-  const [currentGpsCity, setCurrentGpsCity] = useState<string>('');
-  const [destinationFilter, setDestinationFilter] = useState('');
-  
-  const [discoveryModalVisible, setDiscoveryModalVisible] = useState(false);
-  
-  // Map and Events State
-  const [mapRegion, setMapRegion] = useState<any>(null);
-  const [selectedLocation, setSelectedLocation] = useState<{lat: number, lng: number, name: string} | null>(null);
-  const [createEventModalVisible, setCreateEventModalVisible] = useState(false);
-  const [eventDetailsVisible, setEventDetailsVisible] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState<any>(null);
-  const currentUserId = useCurrentUserId();
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const s = useMemo(() => getStyles(colors), [colors]);
+  const currentUserId = useCurrentUserId();
+  const { destination: userNextDestination } = useOnboardingStore();
 
-  const [activePostIndex, setActivePostIndex] = useState(0);
-  const feedFlatListRef = useRef<FlatList<any>>(null);
-  const pendingScrollToPostId = useRef<string | null>(null);
+  const [activeTab, setActiveTab] = useState<FeedTab>('aqui');
+  const overMedia = activeTab === 'aqui' || activeTab === 'rolando';
+  const topSpace = insets.top + FEED_TABS_HEIGHT;
 
-  const performScrollToTargetPost = (targetId: string, currentPosts: any[]) => {
-    if (!currentPosts || currentPosts.length === 0) return false;
-    const targetIndex = currentPosts.findIndex((p: any) => p.id === targetId);
-    if (targetIndex !== -1) {
-      pendingScrollToPostId.current = null;
-      setActivePostIndex(targetIndex);
-      setTimeout(() => {
-        try {
-          feedFlatListRef.current?.scrollToIndex({ index: targetIndex, animated: true });
-        } catch {
-          feedFlatListRef.current?.scrollToOffset({
-            offset: targetIndex * FEED_SNAP_HEIGHT,
-            animated: true,
-          });
-        }
-      }, 80);
-      return true;
-    }
-    return false;
-  };
+  /* ─── Onde a pessoa está (filtra o feed "Estou aqui" e prepara o mapa) ─── */
+  const [currentGpsCity, setCurrentGpsCity] = useState('');
+  const [userCityOnly, setUserCityOnly] = useState('');
+  const [mapRegion, setMapRegion] = useState<any>(null);
+  const [locationState, setLocationState] = useState<'pending' | 'denied' | 'ready'>('pending');
 
-  // Height of the floating top nav bar.
-  // Android: paddingTop:40 already clears the status bar, so don't add insets.top again.
-  // iOS: paddingTop is only 10, so we need insets.top for the notch.
-  const NAV_BAR_HEIGHT = (Platform.OS === 'android' ? 40 : insets.top + 10) + 38;
-  
-  const { data: localEvents } = useLocalEvents(mapRegion?.latitude, mapRegion?.longitude, 50);
-
-  // Pulse animation for Add button
-  const pulseScale = useSharedValue(1);
-  useEffect(() => {
-    pulseScale.value = withRepeat(
-      withSequence(
-        withTiming(1.15, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
-        withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.ease) })
-      ),
-      -1,
-      true
-    );
-  }, []);
-
-  const animatedPlusStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: pulseScale.value }]
-    };
-  });
-
-  // Removed manual currentUserId fetch, handled by useCurrentUserId hook
-
-  if (typeof window !== 'undefined') {
-    (window as any).DeviceEventEmitter = DeviceEventEmitter;
-  }
-
-  useEffect(() => {
-    const sub = DeviceEventEmitter.addListener('openCreatePost', () => {
-      handleAddPostClick();
-    });
-    const testSub = DeviceEventEmitter.addListener('testUploadBanner', (data: any) => {
-      setUploadingPost(data);
-    });
-    return () => {
-      sub.remove();
-      testSub.remove();
-    };
-  }, []);
-
-  // Update feed filter when tab or location changes
-  const [userCityOnly, setUserCityOnly] = useState<string>('');
-
-  const extractCityName = (props: any) => {
-    if (!props) return '';
-    return props.city || props.town || props.village || props.county || props.municipality || props.state || '';
-  };
-
-  useEffect(() => {
-    if (activeTab === 'aqui') {
-      setDestinationFilter(userCityOnly || currentGpsCity || '');
-    } else {
-      setDestinationFilter(userNextDestination || '');
-    }
-  }, [activeTab, currentGpsCity, userCityOnly, userNextDestination]);
-
-  const { data: posts, isLoading, refetch: refetchFeed } = useFeed(destinationFilter);
-
-  useEffect(() => {
-    if (pendingScrollToPostId.current && posts && posts.length > 0) {
-      performScrollToTargetPost(pendingScrollToPostId.current, posts);
-    }
-  }, [posts]);
-
-  useEffect(() => {
-    const scrollToSub = DeviceEventEmitter.addListener('scrollToPost', ({ postId }: { postId: string }) => {
-      if (!postId) return;
-      setActiveTab('aqui');
-      setDestinationFilter('');
-      pendingScrollToPostId.current = postId;
-
-      if (posts && performScrollToTargetPost(postId, posts)) {
-        return;
-      }
-
-      refetchFeed().then((res) => {
-        const freshPosts = res.data || [];
-        performScrollToTargetPost(postId, freshPosts);
-      });
-    });
-
-    return () => {
-      scrollToSub.remove();
-    };
-  }, [posts, refetchFeed]);
-
-  const { data: likedPostsMap } = usePostLikes();
-  const { mutate: toggleLike } = useTogglePostLike();
-  const { mutate: createPost, isPending: isCreatingPost } = useCreatePost();
-  const { mutate: deleteFeedPost } = useDeleteFeedPost();
-  const { mutate: updateCaption, isPending: isUpdatingCaption } = useUpdatePostCaption();
-
-  const [isFeedRefreshing, setIsFeedRefreshing] = useState(false);
-
-  const handleFeedRefresh = async () => {
-    setIsFeedRefreshing(true);
-    try {
-      await refetchFeed();
-    } finally {
-      setIsFeedRefreshing(false);
-    }
-  };
-
-  const [editCaptionModalVisible, setEditCaptionModalVisible] = useState(false);
-  const [editingPostId, setEditingPostId] = useState<string | null>(null);
-  const [editedCaption, setEditedCaption] = useState('');
-  
-  // Map Draft Event States
-  const [isDraftingEvent, setIsDraftingEvent] = useState(false);
-  const [draftEventLocation, setDraftEventLocation] = useState<{ latitude: number, longitude: number } | null>(null);
-  const [draftLocationName, setDraftLocationName] = useState<string>('Buscando local...');
-  const mapRef = useRef<any>(null);
-
-  // Post Creation & Upload States
-  const [uploadingPost, setUploadingPost] = useState<UploadingPostData | null>(null);
-  const uploadProgressInterval = useRef<any>(null);
-  const [createModalVisible, setCreateModalVisible] = useState(false);
-  const [mediaOptionModalVisible, setMediaOptionModalVisible] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [newPostDestination, setNewPostDestination] = useState('');
-  const [newPostDescription, setNewPostDescription] = useState('');
-  const [isLocating, setIsLocating] = useState(false);
-  const [selectedSong, setSelectedSong] = useState<{ id: string, title: string, url: string } | null>(null);
-  const [musicModalVisible, setMusicModalVisible] = useState(false);
-  const [musicSearchQuery, setMusicSearchQuery] = useState('');
-  const [isSearchingMusic, setIsSearchingMusic] = useState(false);
-  const [searchResults, setSearchResults] = useState<ITunesSong[]>([]);
-  const [previewPlayer, setPreviewPlayer] = useState<any>(null);
-  const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
-
-  // Clean up sound when modal closes
-  useEffect(() => {
-    if (!musicModalVisible && previewPlayer) {
-      try {
-        previewPlayer.pause();
-        previewPlayer.release();
-      } catch (e) {}
-      setPreviewPlayer(null);
-      setPlayingTrackId(null);
-    }
-  }, [musicModalVisible]);
-
-  // Comments States
-  const [commentsModalVisible, setCommentsModalVisible] = useState(false);
-  const [activePostId, setActivePostId] = useState<string | null>(null);
-  const [newCommentText, setNewCommentText] = useState('');
-  
-  const { data: comments, isLoading: isLoadingComments } = useComments(activePostId);
-  const { mutate: createComment, isPending: isCreatingComment } = useCreateComment();
-
-  // Helper for summarized location (bairro / cidade / região para privacidade)
-  const formatSummarizedLocation = (props: any) => {
-    if (!props) return 'Região Próxima';
-    const neighborhood = props.suburb || props.district || props.neighbourhood || props.quarter;
-    const city = props.city || props.town || props.village || props.county;
-    const stateOrCountry = props.state || props.country || '';
-
-    if (neighborhood && city && neighborhood !== city) {
-      return `${neighborhood}, ${city}`;
-    } else if (city && stateOrCountry) {
-      return `${city}, ${stateOrCountry}`;
-    } else if (city) {
-      return city;
-    } else if (neighborhood) {
-      return neighborhood;
-    }
-    return 'Região Próxima';
-  };
-
-  const formatExactLocation = (props: any) => {
-    if (!props) return 'Local Desconhecido';
-    if (props.name) return props.name;
-    const street = props.street || props.road || props.pedestrian;
-    const number = props.housenumber;
-    if (street && number) return `${street}, ${number}`;
-    if (street) return street;
-    return formatSummarizedLocation(props);
-  };
-
-  // Fetch user location in background for "Estou aqui" tab
   useEffect(() => {
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
-      
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') { setLocationState('denied'); return; }
       try {
-        let location = await Location.getCurrentPositionAsync({});
-        setMapRegion({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        });
+        const location = await Location.getCurrentPositionAsync({});
+        setMapRegion({ latitude: location.coords.latitude, longitude: location.coords.longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 });
+        setLocationState('ready');
         const res = await fetch(`https://photon.komoot.io/reverse?lon=${location.coords.longitude}&lat=${location.coords.latitude}`);
         const data = await res.json();
-        
-        if (data.features && data.features.length > 0) {
+        if (data.features?.length > 0) {
           const props = data.features[0].properties;
-          const cityOnly = extractCityName(props);
-          setUserCityOnly(cityOnly);
-          const locStr = formatSummarizedLocation(props);
-          setCurrentGpsCity(locStr);
+          setUserCityOnly(extractCityName(props));
+          setCurrentGpsCity(formatSummarizedLocation(props));
         }
       } catch (e) {
-        console.log('Location error:', e);
+        console.warn('Erro ao obter a localização:', e);
+        setLocationState((prev) => (prev === 'pending' ? 'denied' : prev));
       }
     })();
   }, []);
 
-  const handleLike = (postId: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const isLiked = likedPostsMap?.[postId] || false;
-    toggleLike({ postId, isLiked });
+  const destinationFilter = activeTab === 'aqui' ? userCityOnly || currentGpsCity || '' : userNextDestination || '';
+
+  /* ─── Feed ─── */
+  const { data: posts, isLoading, isError, refetch: refetchFeed } = useFeed(destinationFilter);
+  const { data: likedPostsMap } = usePostLikes();
+  const { mutate: toggleLike } = useTogglePostLike();
+  const { mutate: createPost } = useCreatePost();
+  const { mutateAsync: deleteFeedPost } = useDeleteFeedPost();
+  const { mutate: updateCaption, isPending: isUpdatingCaption } = useUpdatePostCaption();
+
+  const [feedHeight, setFeedHeight] = useState(0);
+  const [activePostIndex, setActivePostIndex] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const listRef = useRef<FlatList<any>>(null);
+  const pendingScrollToPostId = useRef<string | null>(null);
+
+  const scrollToPostIndex = useCallback((index: number) => {
+    setActivePostIndex(index);
+    setTimeout(() => {
+      try { listRef.current?.scrollToIndex({ index, animated: true }); }
+      catch { listRef.current?.scrollToOffset({ offset: index * feedHeight, animated: true }); }
+    }, 80);
+  }, [feedHeight]);
+
+  const tryScrollToPost = useCallback((targetId: string, list: any[] | undefined) => {
+    const index = list?.findIndex((p: any) => p.id === targetId) ?? -1;
+    if (index === -1) return false;
+    pendingScrollToPostId.current = null;
+    scrollToPostIndex(index);
+    return true;
+  }, [scrollToPostIndex]);
+
+  // "Ver no feed" a partir do perfil
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('scrollToPost', ({ postId }: { postId: string }) => {
+      if (!postId) return;
+      setActiveTab('aqui');
+      pendingScrollToPostId.current = postId;
+      if (tryScrollToPost(postId, posts)) return;
+      refetchFeed().then((res) => tryScrollToPost(postId, res.data));
+    });
+    return () => sub.remove();
+  }, [posts, refetchFeed, tryScrollToPost]);
+
+  useEffect(() => {
+    if (pendingScrollToPostId.current && posts?.length) tryScrollToPost(pendingScrollToPostId.current, posts);
+  }, [posts, tryScrollToPost]);
+
+  // O FlatList exige que estes dois não mudem entre renders
+  const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
+    if (viewableItems?.length > 0) setActivePostIndex(viewableItems[0].index ?? 0);
+  }, []);
+  const viewabilityConfig = useMemo(() => ({ itemVisiblePercentThreshold: 60 }), []);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try { await refetchFeed(); } finally { setRefreshing(false); }
   };
 
-  const handleShare = async (post: any) => {
+  const handleLike = (postId: string) => toggleLike({ postId, isLiked: likedPostsMap?.[postId] || false });
+
+  const handleShare = async (post: PostItemData) => {
     try {
-      await Share.share({
-        message: `Olha este post de ${post.users?.name || 'alguém'} no Romy! Destino: ${post.destination}.`,
-      });
-    } catch (error) {
-      console.log('Share error:', error);
+      await Share.share({ message: `Olha este post de ${displayName(post.users?.name)} no Romy! Destino: ${post.destination}.` });
+    } catch { /* cancelou ou o navegador não compartilha */ }
+  };
+
+  /* ─── Comentários ─── */
+  const [activePostId, setActivePostId] = useState<string | null>(null);
+  const [commentText, setCommentText] = useState('');
+  const { data: comments, isLoading: loadingComments, isError: commentsFailed, refetch: refetchComments } = useComments(activePostId);
+  const { mutate: createComment, isPending: sendingComment } = useCreateComment();
+
+  const closeComments = () => { setActivePostId(null); setCommentText(''); };
+  const sendComment = () => {
+    if (!commentText.trim() || !activePostId) return;
+    createComment({ postId: activePostId, content: commentText.trim() }, {
+      onSuccess: () => setCommentText(''),
+      onError: () => showError('Não foi possível comentar', 'Tente de novo em instantes.'),
+    });
+  };
+
+  /* ─── Opções e edição de legenda ─── */
+  const [optionsPost, setOptionsPost] = useState<any>(null);
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [editedCaption, setEditedCaption] = useState('');
+
+  /* ─── Publicar ─── */
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [mediaUri, setMediaUri] = useState<string | null>(null);
+  const [mediaIsVideo, setMediaIsVideo] = useState(false);
+  const [place, setPlace] = useState('');
+  const [locating, setLocating] = useState(false);
+  const [description, setDescription] = useState('');
+  const [song, setSong] = useState<{ title: string; url: string } | null>(null);
+  const music = useMusicSearch();
+  const [uploadingPost, setUploadingPost] = useState<UploadingPostData | null>(null);
+  const lastUpload = useRef<UploadPayload | null>(null);
+
+  const processSelectedMedia = useCallback(async (uri: string, isVideo: boolean) => {
+    setMediaUri(uri);
+    setMediaIsVideo(isVideo);
+    setPlace(currentGpsCity);
+    setLocating(true);
+    setComposeOpen(true);
+    try {
+      let { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') status = (await Location.requestForegroundPermissionsAsync()).status;
+      if (status !== 'granted') return;
+      const location = (await Location.getLastKnownPositionAsync()) ?? (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+      if (!location) return;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const res = await fetch(`https://photon.komoot.io/reverse?lon=${location.coords.longitude}&lat=${location.coords.latitude}`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      const data = await res.json();
+      const found = data.features?.length > 0 ? formatSummarizedLocation(data.features[0].properties) : '';
+      // Não sobrescreve o que a pessoa já digitou
+      if (found) setPlace((prev) => prev || found);
+    } catch (e) {
+      console.warn('Não foi possível obter o local da publicação:', e);
+    } finally {
+      setLocating(false);
+    }
+  }, [currentGpsCity]);
+
+  // Recupera a foto caso o Android tenha reiniciado a tela da câmera por falta de memória
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    ImagePicker.getPendingResultAsync().then((res: any) => {
+      const asset = res && !res.canceled && Array.isArray(res.assets) ? res.assets[0] : null;
+      if (asset) processSelectedMedia(asset.uri, asset.type === 'video');
+    }).catch((e) => console.warn('getPendingResultAsync:', e));
+  }, [processSelectedMedia]);
+
+  const openPicker = async (source: 'photo' | 'video' | 'gallery') => {
+    try {
+      const permission = source === 'gallery' ? await ImagePicker.requestMediaLibraryPermissionsAsync() : await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        showError('Permissão necessária', source === 'gallery' ? 'Permita o acesso às suas fotos para escolher uma publicação.' : 'Permita o acesso à câmera para registrar o momento.');
+        return;
+      }
+      // Fecha a folha antes de abrir a câmera nativa, para liberar a janela
+      setSourceOpen(false);
+      await new Promise((r) => setTimeout(r, 200));
+      const options: ImagePicker.ImagePickerOptions = {
+        mediaTypes: source === 'photo' ? ['images'] : source === 'video' ? ['videos'] : ['images', 'videos'],
+        allowsEditing: Platform.OS === 'ios' && source !== 'video', // no Android o recorte abre outra tela e pode reiniciar o app
+        quality: 0.7,
+      };
+      const result = source === 'gallery' ? await ImagePicker.launchImageLibraryAsync(options) : await ImagePicker.launchCameraAsync(options);
+      const asset = !result.canceled ? result.assets?.[0] : null;
+      if (asset) processSelectedMedia(asset.uri, asset.type === 'video');
+    } catch (err: any) {
+      setSourceOpen(false);
+      console.warn('Erro ao escolher a mídia:', err);
+      showError('Não foi possível abrir', source === 'gallery' ? 'Não foi possível acessar a galeria.' : 'Não foi possível abrir a câmera.');
     }
   };
 
-  const handleOpenComments = (postId: string) => {
-    setActivePostId(postId);
-    setCommentsModalVisible(true);
-  };
-
-  const handleCloseComments = () => {
-    setCommentsModalVisible(false);
-    setActivePostId(null);
-    setNewCommentText('');
-  };
-
-  const handleSubmitComment = () => {
-    if (!newCommentText.trim() || !activePostId) return;
-    
-    createComment({
-      postId: activePostId,
-      content: newCommentText.trim()
-    }, {
-      onSuccess: () => {
-        setNewCommentText('');
+  const publish = (payload: UploadPayload) => {
+    lastUpload.current = payload;
+    setUploadingPost({ id: String(Date.now()), mediaUri: payload.mediaUri, destination: payload.destination, description: payload.description, status: 'uploading' });
+    createPost(payload, {
+      onSuccess: async () => {
+        setUploadingPost((prev) => (prev ? { ...prev, status: 'success' } : null));
+        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        await refetchFeed();
+        listRef.current?.scrollToOffset({ offset: 0, animated: true });
+        setActivePostIndex(0);
+        setTimeout(() => setUploadingPost((prev) => (prev?.status === 'success' ? null : prev)), 2200);
       },
-      onError: (err) => {
-        Alert.alert('Erro', 'Não foi possível enviar o comentário.');
-      }
+      onError: (err: any) => {
+        setUploadingPost((prev) => (prev ? { ...prev, status: 'error', errorMessage: err?.message } : null));
+        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      },
     });
   };
+
+  const submitPost = () => {
+    if (!mediaUri || !place.trim()) return;
+    const payload: UploadPayload = {
+      mediaUri,
+      destination: place.trim(),
+      description: description.trim(),
+      audio_title: song?.title,
+      audio_url: song?.url,
+    };
+    // Fecha na hora: o envio continua em segundo plano, com o aviso no topo
+    setComposeOpen(false);
+    setMediaUri(null);
+    setPlace('');
+    setDescription('');
+    setSong(null);
+    music.reset();
+    setActiveTab('aqui');
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    setActivePostIndex(0);
+    publish(payload);
+  };
+
+  const closeCompose = () => { setComposeOpen(false); setMediaUri(null); setPlace(''); setDescription(''); setSong(null); };
+
+  // Botão "+" da barra de abas
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('openCreatePost', () => setSourceOpen(true));
+    return () => sub.remove();
+  }, []);
+
+  /* ─── Mapa e eventos ("Tá rolando") ─── */
+  const [isDraftingEvent, setIsDraftingEvent] = useState(false);
+  const [draftEventLocation, setDraftEventLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [draftLocationName, setDraftLocationName] = useState('Buscando local…');
+  const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number; name: string } | null>(null);
+  const [createEventVisible, setCreateEventVisible] = useState(false);
+  const [eventDetailsVisible, setEventDetailsVisible] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const mapRef = useRef<any>(null);
+  const { data: localEvents } = useLocalEvents(mapRegion?.latitude, mapRegion?.longitude, 50);
 
   const handleLongPressMap = (e: any) => {
     const { coordinate } = e.nativeEvent;
     setDraftEventLocation({ latitude: coordinate.latitude, longitude: coordinate.longitude });
     setIsDraftingEvent(true);
-    mapRef.current?.animateToRegion({
-      latitude: coordinate.latitude,
-      longitude: coordinate.longitude,
-      latitudeDelta: 0.005,
-      longitudeDelta: 0.005,
-    }, 500);
+    if (Platform.OS === 'web') {
+      // No web o endereço vem de uma busca pelo ponto onde a pessoa segurou
+      setDraftLocationName('Buscando endereço…');
+      lookupAddress(coordinate.latitude, coordinate.longitude).then(setDraftLocationName);
+      return;
+    }
+    mapRef.current?.animateToRegion({ latitude: coordinate.latitude, longitude: coordinate.longitude, latitudeDelta: 0.005, longitudeDelta: 0.005 }, 500);
   };
 
-  const handleConfirmDraftLocation = () => {
+  const handleRegionChangeComplete = async (region: any) => {
+    if (!isDraftingEvent) return;
+    setDraftEventLocation({ latitude: region.latitude, longitude: region.longitude });
+    // No web o endereço já foi buscado no toque longo
+    if (Platform.OS === 'web') return;
+    setDraftLocationName('Buscando local…');
+    try {
+      const result = await Location.reverseGeocodeAsync({ latitude: region.latitude, longitude: region.longitude });
+      const addr = result?.[0];
+      if (!addr) { setDraftLocationName('Local no mapa'); return; }
+      if (addr.name && addr.name !== addr.streetNumber && addr.name !== addr.street) setDraftLocationName(addr.name);
+      else if (addr.street) setDraftLocationName(addr.streetNumber ? `${addr.street}, ${addr.streetNumber}` : addr.street);
+      else setDraftLocationName(addr.district || addr.subregion || 'Local no mapa');
+    } catch {
+      setDraftLocationName('Local no mapa');
+    }
+  };
+
+  const confirmDraftLocation = () => {
     if (!draftEventLocation) return;
     setSelectedLocation({ lat: draftEventLocation.latitude, lng: draftEventLocation.longitude, name: draftLocationName });
     setIsDraftingEvent(false);
     setDraftEventLocation(null);
-    setCreateEventModalVisible(true);
+    setCreateEventVisible(true);
   };
 
-  const handleCancelDraftLocation = () => {
-    setIsDraftingEvent(false);
-    setDraftEventLocation(null);
-  };
+  const cancelDraftLocation = () => { setIsDraftingEvent(false); setDraftEventLocation(null); };
 
-  const handleAddPostClick = () => {
-    setMediaOptionModalVisible(true);
-  };
-
-  const processSelectedMedia = async (uri: string) => {
-    setSelectedImage(uri);
-    setIsLocating(true);
-    setCreateModalVisible(true);
-
-    try {
-      if (currentGpsCity) {
-        setNewPostDestination(currentGpsCity);
-      }
-
-      let { status } = await Location.getForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        const req = await Location.requestForegroundPermissionsAsync();
-        status = req.status;
-      }
-
-      if (status === 'granted') {
-        let location = await Location.getLastKnownPositionAsync();
-        if (!location) {
-          location = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-        }
-
-        if (location) {
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 4000);
-            const res = await fetch(
-              `https://photon.komoot.io/reverse?lon=${location.coords.longitude}&lat=${location.coords.latitude}`,
-              { signal: controller.signal }
-            );
-            clearTimeout(timeoutId);
-            const data = await res.json();
-            if (data.features && data.features.length > 0) {
-              const locStr = formatSummarizedLocation(data.features[0].properties);
-              setNewPostDestination(locStr);
-            } else if (!currentGpsCity) {
-              setNewPostDestination('Local Atual');
-            }
-          } catch (_) {
-            if (!currentGpsCity) setNewPostDestination('Local Atual');
-          }
-        }
-      } else {
-        if (!currentGpsCity) setNewPostDestination('Local Atual');
-      }
-    } catch (error) {
-      console.warn('Location retrieval warning:', error);
-      if (!currentGpsCity) setNewPostDestination('Local Atual');
-    } finally {
-      setIsLocating(false);
+  /* ─── Telas ─── */
+  const renderFeed = () => {
+    if (isLoading || feedHeight === 0) {
+      return <View style={s.center}><ActivityIndicator size="large" color="#FFFFFF" accessibilityLabel="Carregando o feed" /></View>;
     }
-  };
-
-  // Recupera foto caso o Android tenha reiniciado a Activity da câmera por pressão de memória
-  useEffect(() => {
-    if (Platform.OS === 'android') {
-      ImagePicker.getPendingResultAsync().then((res: any) => {
-        if (res && !res.canceled && Array.isArray(res.assets) && res.assets.length > 0) {
-          processSelectedMedia(res.assets[0].uri);
-        }
-      }).catch((e) => {
-        console.warn('getPendingResultAsync notice:', e);
-      });
+    if (isError && !posts) {
+      return <FeedMessage icon={WifiSlash} title="Não conseguimos carregar o feed" text="Confira sua internet e tente de novo." action="Tentar de novo" onAction={() => refetchFeed()} top={topSpace} />;
     }
-  }, []);
-
-  const handleTakeCameraPhoto = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permissão Negada', 'Precisamos da sua permissão para acessar a câmera.');
-        return;
-      }
-
-      // Fecha o modal de opções antes de invocar a câmera nativa para liberar a janela
-      setMediaOptionModalVisible(false);
-      await new Promise(r => setTimeout(r, 200));
-
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: Platform.OS === 'ios', // Evita atividade secundária de crop no Android (causa recarregamento)
-        quality: 0.7,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        processSelectedMedia(result.assets[0].uri);
-      }
-    } catch (err: any) {
-      setMediaOptionModalVisible(false);
-      console.warn('Camera error:', err);
-      Alert.alert('Erro', 'Não foi possível abrir a câmera: ' + (err?.message || err));
+    if (!posts || posts.length === 0) {
+      return (
+        <FeedMessage
+          icon={ImageSquare}
+          title="Nada por aqui ainda"
+          text={destinationFilter ? `Ninguém publicou em ${destinationFilter.split(',')[0]} ainda. Que tal ser a primeira pessoa?` : 'Ainda não há publicações. Que tal ser a primeira pessoa?'}
+          action="Publicar"
+          onAction={() => setSourceOpen(true)}
+          top={topSpace}
+        />
+      );
     }
-  };
-
-  const handleRecordCameraVideo = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permissão Negada', 'Precisamos da sua permissão para gravar vídeos.');
-        return;
-      }
-
-      setMediaOptionModalVisible(false);
-      await new Promise(r => setTimeout(r, 200));
-
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-        allowsEditing: false,
-        quality: 0.7,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        processSelectedMedia(result.assets[0].uri);
-      }
-    } catch (err: any) {
-      setMediaOptionModalVisible(false);
-      console.warn('Video error:', err);
-      Alert.alert('Erro', 'Não foi possível gravar o vídeo: ' + (err?.message || err));
-    }
-  };
-
-  const handlePickFromGallery = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert('Permissão Negada', 'Precisamos de permissão para acessar a galeria de fotos.');
-        return;
-      }
-
-      setMediaOptionModalVisible(false);
-      await new Promise(r => setTimeout(r, 200));
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.All,
-        allowsEditing: Platform.OS === 'ios',
-        quality: 0.7,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        processSelectedMedia(result.assets[0].uri);
-      }
-    } catch (err: any) {
-      setMediaOptionModalVisible(false);
-      console.warn('Gallery error:', err);
-      Alert.alert('Erro', 'Não foi possível selecionar a mídia: ' + (err?.message || err));
-    }
-  };
-
-  const handleSubmitPost = () => {
-    if (!selectedImage || !newPostDestination) {
-      Alert.alert('Erro', 'Por favor, aguarde sua localização e insira uma imagem.');
-      return;
-    }
-
-    const mediaUriToUpload = selectedImage;
-    const destinationToUpload = newPostDestination;
-    const descriptionToUpload = newPostDescription;
-    const songToUpload = selectedSong;
-
-    // 1. Fechar o modal imediatamente e limpar o formulário (experiência fluida tipo Instagram)
-    setCreateModalVisible(false);
-    setSelectedImage(null);
-    setNewPostDestination('');
-    setNewPostDescription('');
-    setSelectedSong(null);
-    setMusicSearchQuery('');
-    setSearchResults([]);
-
-    // 2. Ir para a aba do Feed e rolar para o topo
-    setActiveTab('aqui');
-    feedFlatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-    setActivePostIndex(0);
-
-    // 3. Iniciar o banner de progresso de upload no topo
-    setUploadingPost({
-      id: Date.now().toString(),
-      mediaUri: mediaUriToUpload,
-      destination: destinationToUpload,
-      description: descriptionToUpload,
-      status: 'uploading',
-      progress: 15,
-    });
-
-    if (uploadProgressInterval.current) clearInterval(uploadProgressInterval.current);
-    uploadProgressInterval.current = setInterval(() => {
-      setUploadingPost((prev) => {
-        if (!prev || prev.status !== 'uploading') return prev;
-        const inc = Math.floor(Math.random() * 12) + 6;
-        const next = Math.min(prev.progress + inc, 88);
-        return { ...prev, progress: next };
-      });
-    }, 350);
-
-    createPost({
-      mediaUri: mediaUriToUpload,
-      destination: destinationToUpload,
-      description: descriptionToUpload,
-      audio_title: songToUpload ? songToUpload.title : undefined,
-      audio_url: songToUpload ? songToUpload.url : undefined,
-    }, {
-      onSuccess: async () => {
-        if (uploadProgressInterval.current) clearInterval(uploadProgressInterval.current);
-        setUploadingPost((prev) => prev ? { ...prev, progress: 100, status: 'success' } : null);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-        // Atualizar feed imediatamente para o usuário já ver sua publicação no topo
-        await refetchFeed();
-        feedFlatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-        setActivePostIndex(0);
-
-        // Remover banner suavemente após 2.2 segundos
-        setTimeout(() => {
-          setUploadingPost((prev) => (prev?.status === 'success' ? null : prev));
-        }, 2200);
-      },
-      onError: (err: any) => {
-        if (uploadProgressInterval.current) clearInterval(uploadProgressInterval.current);
-        setUploadingPost((prev) => prev ? {
-          ...prev,
-          status: 'error',
-          errorMessage: err?.message || 'Erro ao publicar.',
-        } : null);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      }
-    });
-  };
-
-  const handleRetryUpload = () => {
-    if (!uploadingPost) return;
-    const retryPost = { ...uploadingPost };
-    setUploadingPost({ ...retryPost, status: 'uploading', progress: 20 });
-
-    if (uploadProgressInterval.current) clearInterval(uploadProgressInterval.current);
-    uploadProgressInterval.current = setInterval(() => {
-      setUploadingPost((prev) => {
-        if (!prev || prev.status !== 'uploading') return prev;
-        const inc = Math.floor(Math.random() * 12) + 6;
-        const next = Math.min(prev.progress + inc, 88);
-        return { ...prev, progress: next };
-      });
-    }, 350);
-
-    createPost({
-      mediaUri: retryPost.mediaUri,
-      destination: retryPost.destination,
-      description: retryPost.description || '',
-    }, {
-      onSuccess: async () => {
-        if (uploadProgressInterval.current) clearInterval(uploadProgressInterval.current);
-        setUploadingPost((prev) => prev ? { ...prev, progress: 100, status: 'success' } : null);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        await refetchFeed();
-        feedFlatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-        setActivePostIndex(0);
-        setTimeout(() => {
-          setUploadingPost((prev) => (prev?.status === 'success' ? null : prev));
-        }, 2200);
-      },
-      onError: (err: any) => {
-        if (uploadProgressInterval.current) clearInterval(uploadProgressInterval.current);
-        setUploadingPost((prev) => prev ? {
-          ...prev,
-          status: 'error',
-          errorMessage: err?.message || 'Erro ao publicar.',
-        } : null);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      }
-    });
-  };
-
-  let searchTimeout: any = null;
-  const searchiTunesMusic = (query: string) => {
-    setMusicSearchQuery(query);
-    if (searchTimeout) clearTimeout(searchTimeout);
-    
-    if (query.trim().length < 2) {
-      setSearchResults([]);
-      return;
-    }
-    
-    setIsSearchingMusic(true);
-    searchTimeout = setTimeout(async () => {
-      try {
-        const response = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=20`);
-        const data = await response.json();
-        setSearchResults(data.results || []);
-      } catch (err) {
-        console.log('Error searching iTunes:', err);
-      } finally {
-        setIsSearchingMusic(false);
-      }
-    }, 500);
-  };
-
-  const handlePreviewSong = async (item: ITunesSong) => {
-    if (previewPlayer) {
-      try {
-        previewPlayer.pause();
-        previewPlayer.release();
-      } catch (e) {}
-      setPreviewPlayer(null);
-    }
-    
-    if (playingTrackId === item.trackId.toString()) {
-      setPlayingTrackId(null);
-      return; // Just paused
-    }
-
-    setPlayingTrackId(item.trackId.toString());
-    
-    // Auto-select the song so if they close the modal, it's saved
-    setSelectedSong({
-      id: item.trackId.toString(),
-      title: `${item.trackName} - ${item.artistName}`,
-      url: item.previewUrl
-    });
-
-    try {
-      await AudioModule.setAudioModeAsync({ playsInSilentMode: true });
-      const player = createAudioPlayer({ uri: item.previewUrl });
-      player.play();
-      setPreviewPlayer(player);
-    } catch (e) {
-      console.log('Error previewing sound', e);
-    }
-  };
-
-  const renderComment = ({ item }: { item: any }) => {
-    const author = item.users || {};
-    const defaultAvatar = 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80';
-    const avatarImage = author.photos && author.photos.length > 0 ? author.photos[0] : defaultAvatar;
-
     return (
-      <View style={styles.commentItem}>
-        <Image source={{ uri: avatarImage }} style={styles.commentAvatar} />
-        <View style={styles.commentContent}>
-          <Text style={styles.commentName}>{author.name || 'Viajante'}</Text>
-          <Text style={styles.commentText}>{item.content}</Text>
-        </View>
+      <FlatList
+        ref={listRef}
+        data={posts}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item, index }) => (
+          <PostCard
+            item={item}
+            height={feedHeight}
+            isVisible={index === activePostIndex}
+            isLiked={likedPostsMap?.[item.id] || false}
+            onLike={handleLike}
+            onOpenComments={setActivePostId}
+            onShare={handleShare}
+            onUserPress={(userId) => router.push(`/user/${userId}`)}
+            onOptionsPress={() => setOptionsPost(item)}
+            isOwner={item.user_id === currentUserId}
+          />
+        )}
+        pagingEnabled
+        snapToInterval={feedHeight}
+        snapToAlignment="start"
+        decelerationRate="fast"
+        showsVerticalScrollIndicator={false}
+        windowSize={3}
+        maxToRenderPerBatch={2}
+        getItemLayout={(_, index) => ({ length: feedHeight, offset: feedHeight * index, index })}
+        onScrollToIndexFailed={(info) => listRef.current?.scrollToOffset({ offset: info.index * feedHeight, animated: true })}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#FFFFFF" progressViewOffset={topSpace} />}
+      />
+    );
+  };
+
+  const renderMap = () => {
+    if (locationState === 'denied') {
+      return <FeedMessage icon={MapPin} title="Ative a localização" text="Para ver o que está rolando por perto, o Romy precisa saber onde você está." top={topSpace} />;
+    }
+    if (!mapRegion) {
+      return <View style={s.center}><ActivityIndicator size="large" color="#FFFFFF" accessibilityLabel="Carregando o mapa" /></View>;
+    }
+    return (
+      <View style={{ flex: 1, paddingTop: topSpace }}>
+        <RomyMap
+          ref={mapRef}
+          style={s.map}
+          mapRegion={mapRegion}
+          onLongPress={handleLongPressMap}
+          onRegionChangeComplete={handleRegionChangeComplete}
+          localEvents={localEvents}
+          draftPin={isDraftingEvent ? draftEventLocation : null}
+          onSelectEvent={(event: any) => { setSelectedEvent(event); setEventDetailsVisible(true); }}
+        />
+        {isDraftingEvent && Platform.OS !== 'web' && (
+          <View style={s.pinWrap} pointerEvents="none">
+            <View style={s.pinTip}><Text style={s.pinTipText} numberOfLines={1}>{draftLocationName}</Text></View>
+            <MapPin size={44} weight="fill" color={colors.primary} />
+          </View>
+        )}
+        {isDraftingEvent && Platform.OS === 'web' ? (
+          <View style={s.addressTip} pointerEvents="none">
+            <MapPin size={18} weight="fill" color={colors.primary} />
+            <Text style={s.addressTipText} numberOfLines={2}>{draftLocationName}</Text>
+          </View>
+        ) : null}
+        {isDraftingEvent ? (
+          <View style={s.draftBar}>
+            <Pressable onPress={cancelDraftLocation} accessibilityRole="button" style={[s.draftBtn, s.draftCancel]}><Text style={s.draftCancelText}>Cancelar</Text></Pressable>
+            <Pressable onPress={confirmDraftLocation} accessibilityRole="button" style={[s.draftBtn, s.draftConfirm]}><Text style={s.draftConfirmText}>Confirmar local</Text></Pressable>
+          </View>
+        ) : (
+          <View style={[s.mapHint, Platform.OS === 'web' ? { top: topSpace + 12 } : { bottom: 24 }]} pointerEvents="none">
+            <Text style={s.mapHintText}>Segure no endereço onde o evento vai acontecer</Text>
+          </View>
+        )}
       </View>
     );
   };
 
-  const [postOptionsItem, setPostOptionsItem] = useState<any>(null);
-
-  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
-    if (viewableItems && viewableItems.length > 0) {
-      setActivePostIndex(viewableItems[0].index || 0);
-    }
-  }).current;
-
-  const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 60,
-  }).current;
-
-  const handlePostOptions = (item: any) => {
-    Haptics.selectionAsync();
-    setPostOptionsItem(item);
-  };
-
-  const renderPost = ({ item, index }: { item: any; index: number }) => {
-    const isLiked = likedPostsMap?.[item.id] || false;
-
-    return (
-      <FeedPostItem
-        item={item}
-        isVisible={index === activePostIndex}
-        isLiked={isLiked}
-        onLike={handleLike}
-        onOpenComments={handleOpenComments}
-        onShare={handleShare}
-        onUserPress={(userId) => router.push(`/user/${userId}`)}
-        onOptionsPress={() => handlePostOptions(item)}
-        isOwner={item.user_id === currentUserId}
-      />
-    );
-  };
-
-  const isPhotoOrMap = activeTab === 'aqui' || activeTab === 'rolando';
-  const tabInactiveColor = isPhotoOrMap ? 'rgba(255,255,255,0.65)' : (isDark ? 'rgba(255,255,255,0.6)' : colors.textSecondary);
-  const tabActiveColor = isPhotoOrMap ? '#FFFFFF' : (isDark ? '#FFFFFF' : colors.textPrimary);
-  const underlineColor = isPhotoOrMap ? '#FFFFFF' : colors.primary;
-
   return (
-    <View style={[styles.container, { backgroundColor: isPhotoOrMap ? '#000' : colors.background }]}>
-      
-      {/* Instagram-style Upload Progress Banner */}
+    <View style={[s.root, { backgroundColor: overMedia ? '#000' : colors.background }]} onLayout={(e) => setFeedHeight(e.nativeEvent.layout.height)}>
       <UploadProgressBanner
         post={uploadingPost}
+        topOffset={FEED_TABS_HEIGHT}
         onDismiss={() => setUploadingPost(null)}
-        onRetry={handleRetryUpload}
+        onRetry={() => lastUpload.current && publish(lastUpload.current)}
       />
 
-      <SafeAreaView style={styles.safeAreaAbsolute}>
-        <View style={[
-          styles.topNavWrapper,
-          !isPhotoOrMap && {
-            backgroundColor: colors.background,
-            borderBottomWidth: StyleSheet.hairlineWidth,
-            borderBottomColor: colors.border,
-          }
-        ]}>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false} 
-            contentContainerStyle={styles.topNavContainer}
-            style={{ flex: 1, marginRight: spacing.sm }}
-          >
-            <TouchableOpacity 
-              style={styles.tabWrapper}
-              activeOpacity={0.8}
-              onPress={() => { 
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setActiveTab('aqui');
-              }}
-            >
-              <Text style={[styles.tabText, { color: activeTab === 'aqui' ? tabActiveColor : tabInactiveColor }, !isPhotoOrMap && { textShadowRadius: 0 }, activeTab === 'aqui' && styles.tabTextActive]}>Estou aqui</Text>
-              {activeTab === 'aqui' && <View style={[styles.tabUnderline, { backgroundColor: underlineColor }]} />}
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.tabWrapper}
-              activeOpacity={0.8}
-              onPress={() => { 
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setActiveTab('rolando');
-              }}
-            >
-              <Text style={[styles.tabText, { color: activeTab === 'rolando' ? tabActiveColor : tabInactiveColor }, !isPhotoOrMap && { textShadowRadius: 0 }, activeTab === 'rolando' && styles.tabTextActive]}>Tá rolando</Text>
-              {activeTab === 'rolando' && <View style={[styles.tabUnderline, { backgroundColor: underlineColor }]} />}
-            </TouchableOpacity>
+      <FeedTabs active={activeTab} onChange={setActiveTab} overMedia={overMedia} />
 
-            <TouchableOpacity 
-              style={styles.tabWrapper}
-              activeOpacity={0.8}
-              onPress={() => { 
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setActiveTab('comunidades');
-              }}
-            >
-              <Text style={[styles.tabText, { color: activeTab === 'comunidades' ? tabActiveColor : tabInactiveColor }, !isPhotoOrMap && { textShadowRadius: 0 }, activeTab === 'comunidades' && styles.tabTextActive]}>Comunidades</Text>
-              {activeTab === 'comunidades' && <View style={[styles.tabUnderline, { backgroundColor: underlineColor }]} />}
-            </TouchableOpacity>
+      {activeTab === 'aqui' ? renderFeed()
+        : activeTab === 'rolando' ? renderMap()
+        : activeTab === 'comunidades' ? <View style={{ flex: 1, paddingTop: topSpace }}><CommunitiesScreen /></View>
+        : activeTab === 'ajudinha' ? <View style={{ flex: 1, paddingTop: topSpace }}><HelpBoardScreen isEmbedded city={userCityOnly || currentGpsCity} /></View>
+        : <View style={{ flex: 1, paddingTop: topSpace }}><ProximaViagemScreen originCity={userCityOnly || currentGpsCity} /></View>}
 
-            <TouchableOpacity 
-              style={styles.tabWrapper}
-              activeOpacity={0.8}
-              onPress={() => { 
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setActiveTab('ajudinha');
-              }}
-            >
-              <Text style={[styles.tabText, { color: activeTab === 'ajudinha' ? tabActiveColor : tabInactiveColor }, !isPhotoOrMap && { textShadowRadius: 0 }, activeTab === 'ajudinha' && styles.tabTextActive]}>Ajudinha</Text>
-              {activeTab === 'ajudinha' && <View style={[styles.tabUnderline, { backgroundColor: underlineColor }]} />}
-            </TouchableOpacity>
+      <CommentsSheet
+        visible={!!activePostId}
+        onClose={closeComments}
+        comments={comments}
+        loading={loadingComments}
+        failed={commentsFailed}
+        onRetry={() => refetchComments()}
+        text={commentText}
+        onChangeText={setCommentText}
+        onSend={sendComment}
+        sending={sendingComment}
+      />
 
-            <TouchableOpacity 
-              style={styles.tabWrapper}
-              activeOpacity={0.8}
-              onPress={() => { 
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setActiveTab('proximo');
-              }}
-            >
-              <Text style={[styles.tabText, { color: activeTab === 'proximo' ? tabActiveColor : tabInactiveColor }, !isPhotoOrMap && { textShadowRadius: 0 }, activeTab === 'proximo' && styles.tabTextActive]}>Próxima</Text>
-              {activeTab === 'proximo' && <View style={[styles.tabUnderline, { backgroundColor: underlineColor }]} />}
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
-      </SafeAreaView>
+      <MediaSourceSheet
+        visible={sourceOpen}
+        onClose={() => setSourceOpen(false)}
+        onPhoto={() => openPicker('photo')}
+        onVideo={() => openPicker('video')}
+        onGallery={() => openPicker('gallery')}
+      />
 
-      {/* Main Feed Content */}
-      {activeTab === 'aqui' ? (
-        isLoading ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={colors.primary} />
-          </View>
-        ) : posts && posts.length > 0 ? (
-          <FlatList
-            ref={feedFlatListRef}
-            data={posts}
-            renderItem={renderPost}
-            keyExtractor={item => item.id}
-            pagingEnabled
-            showsVerticalScrollIndicator={false}
-            snapToInterval={FEED_SNAP_HEIGHT}
-            snapToAlignment="start"
-            decelerationRate="fast"
-            getItemLayout={(data, index) => ({
-              length: FEED_SNAP_HEIGHT,
-              offset: FEED_SNAP_HEIGHT * index,
-              index,
-            })}
-            onScrollToIndexFailed={(info) => {
-              feedFlatListRef.current?.scrollToOffset({
-                offset: info.index * FEED_SNAP_HEIGHT,
-                animated: true,
-              });
-            }}
-            onViewableItemsChanged={onViewableItemsChanged}
-            viewabilityConfig={viewabilityConfig}
-            refreshControl={
-              <RefreshControl
-                refreshing={isFeedRefreshing}
-                onRefresh={handleFeedRefresh}
-                tintColor="#FFFFFF"
-                colors={['#6338FA']}
-                progressBackgroundColor="#111"
-              />
-            }
-          />
-        ) : (
-          <View style={{ flex: 1, backgroundColor: '#111' }}>
-            <EmptyState
-              icon={MessageSquare}
-              title="Nenhum post por aqui"
-              subtitle="Seja o primeiro a publicar neste destino. Toque no (+) abaixo!"
-            />
-          </View>
-        )
-      ) : activeTab === 'rolando' ? (
-        <View style={[styles.mapContainer, { paddingTop: NAV_BAR_HEIGHT }]}>
-          {mapRegion ? (
-            <View style={{ flex: 1 }}>
-              <RomyMap 
-                ref={mapRef}
-                style={styles.map}
-                mapRegion={mapRegion}
-                onLongPress={handleLongPressMap}
-                onRegionChangeComplete={async (region: any) => {
-                  if (isDraftingEvent) {
-                    setDraftEventLocation({ latitude: region.latitude, longitude: region.longitude });
-                    setDraftLocationName('Buscando local...');
-                    try {
-                      const geocodeResult = await Location.reverseGeocodeAsync({
-                        latitude: region.latitude,
-                        longitude: region.longitude,
-                      });
-                      if (geocodeResult && geocodeResult.length > 0) {
-                        const addr = geocodeResult[0];
-                        let name = '';
-                        if (addr.name && addr.name !== addr.streetNumber && addr.name !== addr.street) {
-                          name = addr.name;
-                        } else if (addr.street) {
-                          name = addr.streetNumber ? `${addr.street}, ${addr.streetNumber}` : addr.street;
-                        } else {
-                          name = addr.district || addr.subregion || 'Local no Mapa';
-                        }
-                        setDraftLocationName(name);
-                      } else {
-                        setDraftLocationName('Local no Mapa');
-                      }
-                    } catch (e) {
-                      setDraftLocationName('Local no Mapa');
-                    }
-                  }
-                }}
-                localEvents={localEvents}
-                onSelectEvent={(event: any) => {
-                  setSelectedEvent(event);
-                  setEventDetailsVisible(true);
-                }}
-              />
-              {isDraftingEvent && (
-                <View style={styles.fixedPinContainer} pointerEvents="none">
-                  <View style={styles.draftTooltip}>
-                    <Text style={styles.draftTooltipText} numberOfLines={1}>{draftLocationName}</Text>
-                  </View>
-                  <View style={styles.fixedPin}>
-                    <MapPin size={40} color={colors.primary} fill={colors.primary} />
-                  </View>
-                </View>
-              )}
-            </View>
-          ) : (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-              <ActivityIndicator size="large" color={colors.primary} />
-            </View>
-          )}
-          
-          {isDraftingEvent ? (
-            <View style={styles.draftConfirmContainer}>
-              <TouchableOpacity style={styles.draftCancelButton} onPress={handleCancelDraftLocation}>
-                <Text style={styles.draftCancelText}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.draftConfirmButton} onPress={handleConfirmDraftLocation}>
-                <Text style={styles.draftConfirmText}>Confirmar</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.mapHintContainer}>
-              <Text style={styles.mapHintText}>Segure no mapa para criar um evento</Text>
-            </View>
-          )}
-        </View>
-      ) : activeTab === 'comunidades' ? (
-        <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? 100 : 90 }}>
-          <CommunitiesScreen />
-        </View>
-      ) : activeTab === 'ajudinha' ? (
-        <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? 100 : 90 }}>
-          <HelpBoardScreen isEmbedded={true} />
-        </View>
-      ) : (
-        <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? 100 : 90 }}>
-          <ProximaViagemScreen />
-        </View>
-      )}
+      <ComposeSheet
+        visible={composeOpen}
+        onClose={closeCompose}
+        mediaUri={mediaUri}
+        isVideo={mediaIsVideo}
+        place={place}
+        onChangePlace={setPlace}
+        locating={locating}
+        song={song}
+        onClearSong={() => setSong(null)}
+        onPickSong={(m) => setSong({ title: `${m.trackName} - ${m.artistName}`, url: m.previewUrl })}
+        description={description}
+        onChangeDescription={setDescription}
+        onPublish={submitPost}
+        publishing={false}
+        music={music}
+      />
 
-      {/* Comments Modal */}
-      <Modal visible={commentsModalVisible} animationType="slide" transparent={true}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-          style={styles.modalOverlay}
-        >
-          <View style={[styles.modalContent, { height: height * 0.75, paddingBottom: 0 }]}>
-            <View style={styles.dragHandle} />
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>Comentários</Text>
-              <TouchableOpacity onPress={handleCloseComments} accessibilityLabel="Fechar comentários" accessibilityRole="button">
-                <X size={24} color={colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
+      <EditCaptionSheet
+        visible={!!editingPostId}
+        onClose={() => setEditingPostId(null)}
+        value={editedCaption}
+        onChange={setEditedCaption}
+        saving={isUpdatingCaption}
+        onSave={() => {
+          if (!editingPostId) return;
+          updateCaption({ postId: editingPostId, description: editedCaption }, {
+            onSuccess: () => setEditingPostId(null),
+            onError: () => showError('Não foi possível salvar', 'Tente de novo em instantes.'),
+          });
+        }}
+      />
 
-            {isLoadingComments ? (
-              <View style={{ flex: 1, justifyContent: 'center' }}>
-                <ActivityIndicator color={colors.primary} />
-              </View>
-            ) : comments && comments.length > 0 ? (
-              <FlatList
-                data={comments}
-                renderItem={renderComment}
-                keyExtractor={item => item.id}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingBottom: spacing.xl }}
-              />
-            ) : (
-              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <Text style={{ color: colors.textSecondary, ...typography.body }}>
-                  Nenhum comentário ainda. Seja o primeiro!
-                </Text>
-              </View>
-            )}
+      <PostOptionsSheet
+        visible={!!optionsPost}
+        onClose={() => setOptionsPost(null)}
+        post={optionsPost}
+        onEditCaption={(post) => { setEditingPostId(post.id); setEditedCaption(post.description || post.caption || ''); }}
+        onDelete={async (postId) => { await deleteFeedPost({ postId }); }}
+        isOwner={optionsPost?.user_id === currentUserId}
+      />
 
-            <View style={styles.commentInputWrapper}>
-              <TextInput
-                style={styles.commentInput}
-                placeholder="Adicionar um comentário..."
-                placeholderTextColor={colors.textMuted}
-                value={newCommentText}
-                onChangeText={setNewCommentText}
-              />
-              <TouchableOpacity 
-                style={[styles.sendCommentBtn, !newCommentText.trim() && { opacity: 0.5 }]} 
-                onPress={handleSubmitComment}
-                disabled={!newCommentText.trim() || isCreatingComment}
-              >
-                {isCreatingComment ? (
-                  <ActivityIndicator size="small" color={colors.surface} />
-                ) : (
-                  <Send size={18} color={colors.surface} style={{ marginLeft: 2 }} />
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Media Source Choice Modal */}
-      <Modal visible={mediaOptionModalVisible} animationType="slide" transparent={true}>
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
-          onPress={() => setMediaOptionModalVisible(false)}
-        >
-          <View style={styles.pickerModalContent}>
-            <View style={styles.dragHandle} />
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>Criar Publicação</Text>
-              <TouchableOpacity onPress={() => setMediaOptionModalVisible(false)} accessibilityLabel="Fechar" accessibilityRole="button">
-                <X size={24} color={colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity style={styles.pickerOptionBtn} onPress={handleTakeCameraPhoto}>
-              <View style={[styles.pickerIconBox, { backgroundColor: 'rgba(99, 56, 250, 0.15)' }]}>
-                <Camera size={24} color={colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.pickerOptionTitle}>Tirar Foto na hora</Text>
-                <Text style={styles.pickerOptionSub}>Abra a câmera para registrar o momento</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.pickerOptionBtn} onPress={handleRecordCameraVideo}>
-              <View style={[styles.pickerIconBox, { backgroundColor: 'rgba(255, 42, 84, 0.15)' }]}>
-                <Film size={24} color="#FF2A54" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.pickerOptionTitle}>Gravar Vídeo na hora</Text>
-                <Text style={styles.pickerOptionSub}>Grave um vídeo para o feed Romy</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.pickerOptionBtn} onPress={handlePickFromGallery}>
-              <View style={[styles.pickerIconBox, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
-                <ImageIcon size={24} color="#10B981" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.pickerOptionTitle}>Escolher da Galeria</Text>
-                <Text style={styles.pickerOptionSub}>Selecione fotos ou vídeos salvos</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-{/* Create Post Modal */}
-      <Modal visible={createModalVisible} animationType="slide" transparent={true}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-          <View style={[styles.modalContent, musicModalVisible && { height: height * 0.6 }]}>
-            {musicModalVisible ? (
-              <View style={{ flex: 1, minHeight: 400 }}>
-                <View style={styles.modalHeaderRow}>
-                  <Text style={styles.modalTitle}>Selecionar Música</Text>
-                  <TouchableOpacity onPress={() => setMusicModalVisible(false)}>
-                    <X size={24} color={colors.textPrimary} />
-                  </TouchableOpacity>
-                </View>
-                
-                <View style={styles.gpsInputContainer}>
-                  <Search size={20} color={colors.textMuted} style={{ marginRight: spacing.sm }} />
-                  <TextInput
-                    style={styles.gpsInputText}
-                    placeholder="Pesquise por música ou artista..."
-                    placeholderTextColor={colors.textMuted}
-                    value={musicSearchQuery}
-                    onChangeText={searchiTunesMusic}
-                    autoCapitalize="none"
-                    autoFocus
-                  />
-                  {isSearchingMusic && <ActivityIndicator size="small" color={colors.primary} />}
-                </View>
-
-                {searchResults.length === 0 && musicSearchQuery.length < 2 && (
-                   <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl }}>
-                      <Music size={48} color={colors.textMuted} style={{ marginBottom: spacing.md, opacity: 0.5 }} />
-                      <Text style={{ color: colors.textSecondary, textAlign: 'center' }}>
-                         Digite o nome da música ou artista para buscar no Apple Music.
-                      </Text>
-                   </View>
-                )}
-                
-                <FlatList
-                  data={searchResults}
-                  keyExtractor={(item) => item.trackId.toString()}
-                  contentContainerStyle={{ gap: spacing.sm, paddingTop: spacing.sm, paddingBottom: 40 }}
-                  style={{ flex: 1 }}
-                  keyboardShouldPersistTaps="handled"
-                  renderItem={({ item }) => (
-                    <TouchableOpacity 
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        padding: spacing.md,
-                        backgroundColor: colors.surface,
-                        borderRadius: 12,
-                        borderWidth: 1,
-                        borderColor: selectedSong?.id === item.trackId.toString() ? colors.primary : 'transparent'
-                      }}
-                      onPress={() => {
-                        if (item.previewUrl) {
-                          handlePreviewSong(item);
-                        } else {
-                          Alert.alert('Aviso', 'Esta música não tem prévia disponível.');
-                        }
-                      }}
-                    >
-                      <View style={{ position: 'relative', marginRight: spacing.md }}>
-                        {item.artworkUrl60 ? (
-                          <Image source={{ uri: item.artworkUrl60 }} style={{ width: 44, height: 44, borderRadius: 8 }} />
-                        ) : (
-                          <View style={{ width: 44, height: 44, borderRadius: 8, backgroundColor: 'rgba(99, 56, 250, 0.1)', justifyContent: 'center', alignItems: 'center' }}>
-                            <Music size={20} color={colors.primary} />
-                          </View>
-                        )}
-                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: playingTrackId === item.trackId.toString() ? 'rgba(0,0,0,0.5)' : 'transparent', borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}>
-                          {playingTrackId === item.trackId.toString() ? (
-                            <Pause size={20} color="#FFF" fill="#FFF" />
-                          ) : (
-                            <Play size={20} color="#FFF" fill="#FFF" style={{ opacity: 0.8 }} />
-                          )}
-                        </View>
-                      </View>
-                      
-                      <View style={{ flex: 1, marginRight: spacing.sm }}>
-                        <Text style={{ color: colors.textPrimary, fontWeight: '600', marginBottom: 2 }} numberOfLines={1}>{item.trackName}</Text>
-                        <Text style={{ color: colors.textSecondary, fontSize: 13 }} numberOfLines={1}>{item.artistName}</Text>
-                      </View>
-                      
-                      <TouchableOpacity 
-                        style={{ padding: 8, backgroundColor: selectedSong?.id === item.trackId.toString() ? colors.primary : 'rgba(255,255,255,0.1)', borderRadius: 20 }}
-                        onPress={() => {
-                          setSelectedSong({
-                            id: item.trackId.toString(),
-                            title: `${item.trackName} - ${item.artistName}`,
-                            url: item.previewUrl
-                          });
-                          setMusicModalVisible(false);
-                        }}
-                      >
-                        {selectedSong?.id === item.trackId.toString() ? (
-                          <BadgeCheck size={20} color="#FFF" />
-                        ) : (
-                          <Text style={{ color: colors.textPrimary, fontSize: 12, fontWeight: '600', paddingHorizontal: 4 }}>Usar</Text>
-                        )}
-                      </TouchableOpacity>
-                    </TouchableOpacity>
-                  )}
-                />
-              </View>
-            ) : (
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xxl }}>
-                <TouchableOpacity style={styles.closeModalButton} onPress={() => setCreateModalVisible(false)}>
-                  <X size={24} color={colors.textPrimary} />
-                </TouchableOpacity>
-                
-                <Text style={styles.modalTitle}>Novo Post</Text>
-                
-                {selectedImage && (
-                  <Image source={{ uri: selectedImage }} style={styles.previewImage} />
-                )}
-                
-                <Text style={styles.modalLabel}>Localização GPS (Obrigatória)</Text>
-                <View style={styles.gpsInputContainer}>
-                  <MapPin size={20} color={colors.primary} style={{ marginRight: spacing.sm }} />
-                  {isLocating ? (
-                    <ActivityIndicator size="small" color={colors.primary} style={{ flex: 1 }} />
-                  ) : (
-                    <TextInput
-                      style={styles.gpsInputText}
-                      value={newPostDestination}
-                      editable={false}
-                      placeholder="Buscando seu local real..."
-                      placeholderTextColor={colors.textMuted}
-                    />
-                  )}
-                </View>
-
-                <Text style={styles.modalLabel}>Música de Fundo (Opcional)</Text>
-                <TouchableOpacity 
-                  style={[styles.gpsInputContainer, { marginBottom: spacing.md, paddingVertical: 12, backgroundColor: selectedSong ? 'rgba(99, 56, 250, 0.1)' : colors.surface }]} 
-                  onPress={() => setMusicModalVisible(true)}
-                >
-                  <Music size={20} color={selectedSong ? colors.primary : colors.textMuted} style={{ marginRight: spacing.sm }} />
-                  <Text style={{ flex: 1, color: selectedSong ? colors.textPrimary : colors.textMuted, fontSize: 14 }}>
-                    {selectedSong ? selectedSong.title : 'Escolher Música'}
-                  </Text>
-                  {selectedSong && (
-                    <TouchableOpacity onPress={() => setSelectedSong(null)} style={{ padding: 4 }}>
-                      <X size={16} color={colors.textSecondary} />
-                    </TouchableOpacity>
-                  )}
-                </TouchableOpacity>
-
-                <Text style={styles.modalLabel}>Descrição (Opcional)</Text>
-                <TextInput
-                  style={[styles.modalInput, { height: 80, textAlignVertical: 'top' }]}
-                  placeholder="Escreva algo sobre este lugar..."
-                  multiline
-                  numberOfLines={3}
-                  value={newPostDescription}
-                  onChangeText={setNewPostDescription}
-                />
-
-                <TouchableOpacity 
-                  style={[styles.submitButton, (isCreatingPost || isLocating) && { opacity: 0.7 }]} 
-                  onPress={handleSubmitPost}
-                  disabled={isCreatingPost || isLocating}
-                >
-                  {isCreatingPost ? (
-                    <ActivityIndicator color={colors.surface} />
-                  ) : (
-                    <Text style={styles.submitButtonText}>Publicar Post</Text>
-                  )}
-                </TouchableOpacity>
-              </ScrollView>
-            )}
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-
-      {/* Event Modals */}
-      <CreateEventModal 
-        visible={createEventModalVisible}
-        onClose={() => setCreateEventModalVisible(false)}
+      <CreateEventModal
+        visible={createEventVisible}
+        onClose={() => setCreateEventVisible(false)}
         latitude={selectedLocation?.lat || null}
         longitude={selectedLocation?.lng || null}
         locationName={selectedLocation?.name || ''}
       />
-      <EventDetailsModal
-        visible={eventDetailsVisible}
-        event={selectedEvent}
-        onClose={() => setEventDetailsVisible(false)}
-        currentUserId={currentUserId}
-      />
-
-      {/* Edit Caption Modal */}
-      <Modal visible={editCaptionModalVisible} animationType="slide" transparent={true}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { height: 'auto', paddingBottom: spacing.xxl }]}>
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>Editar Legenda</Text>
-              <TouchableOpacity onPress={() => setEditCaptionModalVisible(false)}>
-                <X size={24} color={colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-
-            <TextInput
-              style={[styles.modalInput, { height: 100, textAlignVertical: 'top', marginTop: spacing.md }]}
-              placeholder="Sua legenda aqui..."
-              multiline
-              placeholderTextColor={colors.textMuted}
-              value={editedCaption}
-              onChangeText={setEditedCaption}
-            />
-
-            <TouchableOpacity 
-              style={[styles.submitButton, { marginTop: spacing.lg }]} 
-              onPress={() => {
-                if (!editingPostId) return;
-                updateCaption({ postId: editingPostId, description: editedCaption }, {
-                  onSuccess: () => {
-                    setEditCaptionModalVisible(false);
-                  }
-                });
-              }}
-              disabled={isUpdatingCaption}
-            >
-              {isUpdatingCaption ? (
-                <ActivityIndicator color={colors.background} />
-              ) : (
-                <Text style={styles.submitButtonText}>Salvar Alterações</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Modern Post Options Sheet */}
-      <PostOptionsSheet
-        visible={!!postOptionsItem}
-        onClose={() => setPostOptionsItem(null)}
-        post={postOptionsItem}
-        title="Opções da Publicação"
-        onEditCaption={(post) => {
-          setEditingPostId(post.id);
-          setEditedCaption(post.description || post.caption || '');
-          setEditCaptionModalVisible(true);
-        }}
-        onDelete={async (postId) => {
-          deleteFeedPost({ postId });
-        }}
-        isOwner={postOptionsItem?.user_id === currentUserId}
-      />
+      <EventDetailsModal visible={eventDetailsVisible} event={selectedEvent} onClose={() => setEventDetailsVisible(false)} currentUserId={currentUserId} />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  feedItem: {
-    height: SNAP_HEIGHT,
-    width: width,
-  },
-  mapContainer: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  map: {
-    width: '100%',
-    height: '100%',
-  },
-  markerContainer: {
-    width: 44,
-    height: 44,
-    backgroundColor: '#FFF',
-    borderRadius: 22,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    // Shadow removed to prevent clipping
-  },
-  markerIcon: {
-    fontSize: 20,
-  },
-  mapHintContainer: {
-    position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 100 : 80,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  mapHintText: {
-    color: '#FFF',
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  backgroundImage: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-  },
-  safeAreaAbsolute: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-  },
-  topNavWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: Platform.OS === 'android' ? 40 : 10,
-    paddingHorizontal: spacing.md,
-  },
-  topNavContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12, // Decreased gap so the 4th item can peek into view
-    paddingRight: 40,
-  },
-  tabWrapper: {
-    paddingVertical: spacing.sm,
-    paddingBottom: 2,
-  },
-  tabText: {
-    ...typography.body,
-    fontSize: 14,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.55)',
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  tabTextActive: {
-    fontWeight: '700',
-  },
-  tabUnderline: {
-    height: 2,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 1,
-    marginTop: 3,
-    alignSelf: 'center',
-    width: '70%',
-  },
-  topAddButtonContainer: {
-    marginLeft: 'auto',
-    paddingLeft: spacing.sm,
-  },
-  topAddButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    overflow: 'hidden',
-    marginLeft: spacing.xs,
-  },
-  topAddGradient: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  gradient: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  contentContainer: {
-    flexDirection: 'row',
-    padding: spacing.md,
-    paddingBottom: spacing.lg,
-    alignItems: 'flex-end',
-  },
-  userInfo: {
-    flex: 1,
-    marginRight: spacing.md,
-  },
-  avatarRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  avatarImage: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    marginRight: spacing.sm,
-    backgroundColor: '#333',
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  name: {
-    ...typography.h3,
-    color: colors.surface,
-    fontWeight: '700',
-    textShadowColor: 'rgba(0,0,0,0.4)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  locationText: {
-    ...typography.caption,
-    color: colors.surface,
-    fontWeight: '600',
-    textShadowColor: 'rgba(0,0,0,0.4)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  description: {
-    ...typography.body,
-    color: colors.surface,
-    lineHeight: 20,
-    marginBottom: spacing.sm,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  dateButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignSelf: 'flex-start',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-  },
-  dateButtonText: {
-    ...typography.caption,
-    color: colors.surface,
-    fontWeight: '600',
-  },
-  actionBar: {
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: spacing.lg,
-    paddingBottom: spacing.sm,
-  },
-  actionButton: {
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 3,
-  },
-  actionText: {
-    ...typography.caption,
-    color: colors.surface,
-    marginTop: 4,
-    fontWeight: '700',
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: colors.card,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: spacing.xl,
-    paddingBottom: 40,
-  },
-  dragHandle: {
-    width: 40,
-    height: 4,
-    backgroundColor: colors.border,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: spacing.md,
-  },
-  modalHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  closeModalButton: {
-    alignSelf: 'flex-end',
-    marginBottom: spacing.sm,
-  },
-  modalTitle: {
-    ...typography.h2,
-    color: colors.textPrimary,
-  },
-  previewImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 12,
-    marginBottom: spacing.md,
-  },
-  modalLabel: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    fontWeight: '600',
-    marginBottom: spacing.xs,
-  },
-  gpsInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    borderRadius: 12,
-    paddingHorizontal: spacing.md,
-    height: 52,
-    marginBottom: spacing.md,
-    opacity: 0.8,
-  },
-  gpsInputText: {
-    flex: 1,
-    ...typography.body,
-    color: colors.textPrimary,
-    fontWeight: '600',
-  },
-  modalInput: {
-    backgroundColor: colors.inputBackground,
-    borderRadius: 12,
-    padding: spacing.md,
-    ...typography.body,
-    color: colors.textPrimary,
-    marginBottom: spacing.md,
-  },
-  submitButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    height: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: spacing.sm,
-  },
-  submitButtonText: {
-    ...typography.body,
-    color: colors.surface,
-    fontWeight: '600',
-  },
-  commentItem: {
-    flexDirection: 'row',
-    marginBottom: spacing.lg,
-  },
-  commentAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: spacing.sm,
-    backgroundColor: '#eee',
-  },
-  commentContent: {
-    flex: 1,
-  },
-  commentName: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  commentText: {
-    ...typography.body,
-    color: colors.textPrimary,
-  },
-  commentInputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
-  },
-  commentInput: {
-    flex: 1,
-    backgroundColor: colors.inputBackground,
-    borderRadius: 20,
-    paddingHorizontal: spacing.md,
-    height: 40,
-    ...typography.body,
-    color: colors.textPrimary,
-    marginRight: spacing.sm,
-  },
-  sendCommentBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pickerModalContent: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: spacing.xl,
-    paddingBottom: 40,
-    width: '100%',
-  },
-  pickerOptionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    backgroundColor: colors.background,
-    marginBottom: spacing.md,
-    gap: 14,
-  },
-  pickerIconBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pickerOptionTitle: {
-    ...typography.h3,
-    fontSize: 16,
-    color: colors.textPrimary,
-    fontWeight: '700',
-  },
-  pickerOptionSub: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  draftConfirmContainer: {
-    position: 'absolute',
-    bottom: 24,
-    left: 20,
-    right: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  draftCancelButton: {
-    flex: 1,
-    backgroundColor: '#333',
-    paddingVertical: 14,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  draftConfirmButton: {
-    flex: 1,
-    backgroundColor: colors.primary,
-    paddingVertical: 14,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  draftCancelText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  draftConfirmText: {
-    color: '#000',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  fixedPinContainer: {
-    ...StyleSheet.absoluteFill,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  fixedPin: {
-    marginTop: -10, // Adjust relative to tooltip and center
-  },
-  draftTooltip: {
-    backgroundColor: colors.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    marginBottom: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-    maxWidth: 250,
-  },
-  draftTooltipText: {
-    ...typography.caption,
-    color: colors.textPrimary,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
+// Aviso no centro da tela escura do feed e do mapa
+function FeedMessage({ icon: MessageIcon, title, text, action, onAction, top }: {
+  icon: Icon; title: string; text: string; action?: string; onAction?: () => void; top: number;
+}) {
+  const { colors } = useTheme();
+  const s = useMemo(() => getStyles(colors), [colors]);
+  return (
+    <View style={[s.message, { paddingTop: top }]}>
+      <View style={s.messageTile}><MessageIcon size={34} weight="duotone" color="#FFFFFF" /></View>
+      <Text style={s.messageTitle} accessibilityRole="header">{title}</Text>
+      <Text style={s.messageText}>{text}</Text>
+      {action && onAction ? (
+        <Pressable onPress={onAction} accessibilityRole="button" style={({ pressed }) => [s.messageBtn, pressed && { transform: [{ scale: 0.98 }] }]}>
+          <Text style={s.messageBtnText}>{action}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+const getStyles = (c: ThemeColors) => StyleSheet.create({
+  root: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  map: { width: '100%', height: '100%' },
+
+  message: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 32 },
+  messageTile: { width: 72, height: 72, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  messageTitle: { fontSize: 22, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.4, textAlign: 'center' },
+  messageText: { fontSize: 16, lineHeight: 23, color: 'rgba(255,255,255,0.78)', textAlign: 'center', maxWidth: 320 },
+  messageBtn: { height: 52, paddingHorizontal: 28, borderRadius: 16, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
+  messageBtnText: { fontSize: 16, fontWeight: '700', color: c.onPrimary },
+
+  mapHint: { position: 'absolute', alignSelf: 'center', height: 34, paddingHorizontal: 16, borderRadius: 17, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center' },
+  mapHintText: { fontSize: 13, fontWeight: '600', color: '#FFFFFF' },
+  pinWrap: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
+  pinTip: { maxWidth: 260, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: c.card, marginBottom: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4 },
+  pinTipText: { fontSize: 14, fontWeight: '600', color: c.textPrimary, textAlign: 'center' },
+  addressTip: { position: 'absolute', left: 20, right: 20, bottom: 88, flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 16, backgroundColor: c.card, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10, elevation: 6 },
+  addressTipText: { flex: 1, fontSize: 15, fontWeight: '700', color: c.textPrimary },
+  draftBar: { position: 'absolute', bottom: 24, left: 20, right: 20, flexDirection: 'row', gap: 12 },
+  draftBtn: { flex: 1, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  draftCancel: { backgroundColor: 'rgba(0,0,0,0.75)' },
+  draftConfirm: { backgroundColor: c.primary },
+  draftCancelText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  draftConfirmText: { fontSize: 16, fontWeight: '700', color: c.onPrimary },
 });

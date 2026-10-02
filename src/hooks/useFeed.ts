@@ -3,15 +3,16 @@ import { supabase } from '../lib/supabase';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
+import { useCurrentUserId } from './useMessenger';
 
 // Fetch posts for the Feed
 export function useFeed(destination?: string) {
+  const userId = useCurrentUserId();
+
   return useQuery({
     queryKey: ['feed', destination],
+    enabled: !!userId,
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
       let query = supabase
         .from('posts')
         .select(`
@@ -34,24 +35,34 @@ export function useFeed(destination?: string) {
         query = query.ilike('destination', `%${destination}%`);
       }
 
-      try {
-        const { data, error } = await query;
-        if (error) {
-          console.warn('Feed fetch notice:', error.message);
-          return [];
-        }
-        
-        return (data || []).filter((post: any) => 
-          post.users && 
-          post.users.name !== 'Conta Excluída' && 
-          post.users.name !== 'Usuário Romy'
-        );
-      } catch (err) {
-        console.warn('Feed query error handled:', err);
-        return [];
-      }
+      // Erro precisa chegar na tela: antes virava lista vazia e parecia "ninguém postou"
+      const { data, error } = await query;
+      if (error) throw error;
+
+      return (data || []).filter((post: any) =>
+        post.users &&
+        post.users.name !== 'Conta Excluída' &&
+        post.users.name !== 'Usuário Romy'
+      );
     },
   });
+}
+
+const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp'];
+const VIDEO_EXTS = ['mp4', 'mov', 'webm'];
+const EXT_BY_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
+  'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm',
+};
+
+// No web o seletor devolve um blob: URL sem extensão; aí o tipo vem do próprio arquivo.
+function describeMedia(uri: string, mime?: string) {
+  const clean = uri.split('?')[0];
+  const rawExt = clean.includes('.') ? clean.substring(clean.lastIndexOf('.') + 1).toLowerCase() : '';
+  const ext = (mime && EXT_BY_MIME[mime]) || ([...IMAGE_EXTS, ...VIDEO_EXTS].includes(rawExt) ? rawExt : 'jpg');
+  const isVideo = VIDEO_EXTS.includes(ext);
+  const contentType = isVideo ? `video/${ext === 'mov' ? 'quicktime' : ext}` : `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+  return { ext, isVideo, contentType, maxMb: isVideo ? 50 : 15 };
 }
 
 // Create a new post
@@ -63,40 +74,36 @@ export function useCreatePost() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      const cleanUri = mediaUri.split('?')[0];
-      const rawExt = cleanUri.substring(cleanUri.lastIndexOf('.') + 1).toLowerCase() || 'jpg';
-      const allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
-      const ext = allowedExts.includes(rawExt) ? rawExt : 'jpg';
-      const fileName = `${user.id}/${Date.now()}.${ext}`;
-      let publicUrl = '';
+      let fileName: string;
 
       if (Platform.OS === 'web') {
         const response = await fetch(mediaUri);
         const blob = await response.blob();
-        if (blob.size > 15 * 1024 * 1024) {
-          throw new Error('A imagem selecionada é muito grande (máximo 15MB).');
+        const media = describeMedia(mediaUri, blob.type);
+        if (blob.size > media.maxMb * 1024 * 1024) {
+          throw new Error(`O arquivo é muito grande (máximo ${media.maxMb} MB).`);
         }
+        fileName = `${user.id}/${Date.now()}.${media.ext}`;
         const { error: uploadError } = await supabase.storage
           .from('posts')
-          .upload(fileName, blob, { contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}` });
+          .upload(fileName, blob, { contentType: media.contentType });
         if (uploadError) throw uploadError;
       } else {
+        const media = describeMedia(mediaUri);
         const fileInfo = await FileSystem.getInfoAsync(mediaUri);
-        if (fileInfo.exists && fileInfo.size && fileInfo.size > 15 * 1024 * 1024) {
-          throw new Error('A imagem selecionada é muito grande (máximo 15MB).');
+        if (fileInfo.exists && fileInfo.size && fileInfo.size > media.maxMb * 1024 * 1024) {
+          throw new Error(`O arquivo é muito grande (máximo ${media.maxMb} MB).`);
         }
+        fileName = `${user.id}/${Date.now()}.${media.ext}`;
         const base64 = await FileSystem.readAsStringAsync(mediaUri, { encoding: 'base64' });
         const { error: uploadError } = await supabase.storage
           .from('posts')
-          .upload(fileName, decode(base64), { 
-            contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
-            upsert: true
-          });
+          .upload(fileName, decode(base64), { contentType: media.contentType, upsert: true });
         if (uploadError) throw uploadError;
       }
 
       const { data: urlData } = supabase.storage.from('posts').getPublicUrl(fileName);
-      publicUrl = urlData.publicUrl;
+      const publicUrl = urlData.publicUrl;
 
       const { data, error } = await supabase
         .from('posts')
@@ -114,6 +121,7 @@ export function useCreatePost() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feed'] });
+      queryClient.invalidateQueries({ queryKey: ['myPosts'] });
     },
   });
 }

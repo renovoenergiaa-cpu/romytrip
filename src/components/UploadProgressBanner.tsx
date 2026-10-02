@@ -1,190 +1,83 @@
-import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  TouchableOpacity,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+import { useMemo } from 'react';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
-import { CheckCircle, AlertCircle, X, RotateCcw } from 'lucide-react-native';
-import { useTheme } from '../theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme, type ThemeColors } from '../theme';
+import { ArrowClockwise, CheckCircle, X } from '../features/onboarding/icons';
 
 export interface UploadingPostData {
   id: string;
   mediaUri: string;
   destination: string;
   description?: string;
+  /** Não há como medir o envio de verdade: enquanto sobe, o banner mostra "Publicando…". */
   status: 'uploading' | 'success' | 'error';
-  progress: number; // 0 to 100
   errorMessage?: string;
 }
 
-interface UploadProgressBannerProps {
+/** Aviso no topo enquanto a publicação sobe, termina ou falha. */
+export function UploadProgressBanner({ post, topOffset = 0, onDismiss, onRetry }: {
   post: UploadingPostData | null;
+  /** Espaço para não cobrir as abas do topo. */
+  topOffset?: number;
   onDismiss?: () => void;
   onRetry?: () => void;
-}
-
-export function UploadProgressBanner({ post, onDismiss, onRetry }: UploadProgressBannerProps) {
-  const { colors, isDark } = useTheme();
-
+}) {
+  const { colors } = useTheme();
+  const s = useMemo(() => getStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
   if (!post) return null;
 
-  const isUploading = post.status === 'uploading';
-  const isSuccess = post.status === 'success';
-  const isError = post.status === 'error';
-
-  const cardBg = isDark ? '#16161A' : '#FFFFFF';
-  const borderColor = isDark ? '#26262B' : '#E5E7EB';
-  const progressTrack = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)';
-
-  const progressColor = isSuccess ? '#10B981' : isError ? '#EF4444' : '#6338FA';
+  const failed = post.status === 'error';
+  const done = post.status === 'success';
 
   return (
     <Animated.View
-      entering={FadeInUp.springify().damping(16)}
-      exiting={FadeOutUp.duration(300)}
-      style={[
-        styles.container,
-        {
-          backgroundColor: cardBg,
-          borderColor: borderColor,
-        },
-      ]}
+      entering={FadeInUp.duration(220)}
+      exiting={FadeOutUp.duration(160)}
+      accessibilityLiveRegion="polite"
+      style={[s.card, { top: insets.top + topOffset + 8 }]}
     >
-      {/* Thumbnail */}
-      <View style={styles.thumbnailWrapper}>
-        <Image source={{ uri: post.mediaUri }} style={styles.thumbnail} resizeMode="cover" />
-      </View>
-
-      {/* Info & Progress */}
-      <View style={styles.contentWrapper}>
-        <View style={styles.titleRow}>
-          <Text style={[styles.title, { color: isSuccess ? '#10B981' : isError ? '#EF4444' : colors.textPrimary }]} numberOfLines={1}>
-            {isUploading && 'Publicando no feed...'}
-            {isSuccess && 'Publicado com sucesso!'}
-            {isError && 'Falha ao publicar'}
-          </Text>
-        </View>
-
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={1}>
-          {post.destination || post.description || 'Publicação'}
+      <Image source={{ uri: post.mediaUri }} style={s.thumb} resizeMode="cover" />
+      <View style={s.texts}>
+        <Text style={[s.title, failed && { color: colors.error }, done && { color: colors.success }]} numberOfLines={1}>
+          {failed ? 'Não foi possível publicar' : done ? 'Publicado!' : 'Publicando…'}
         </Text>
-
-        {/* Progress bar */}
-        <View style={[styles.progressTrack, { backgroundColor: progressTrack }]}>
-          <View
-            style={[
-              styles.progressBar,
-              {
-                width: `${Math.min(100, Math.max(8, post.progress))}%`,
-                backgroundColor: progressColor,
-              },
-            ]}
-          />
+        <Text style={s.subtitle} numberOfLines={failed ? 2 : 1}>
+          {failed ? post.errorMessage || 'Confira sua conexão e tente de novo.' : post.destination || post.description || 'Sua publicação'}
+        </Text>
+      </View>
+      {post.status === 'uploading' ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+      {done ? <CheckCircle size={24} weight="fill" color={colors.success} /> : null}
+      {failed ? (
+        <View style={s.actions}>
+          {onRetry ? (
+            <Pressable onPress={onRetry} accessibilityRole="button" accessibilityLabel="Tentar de novo" hitSlop={8} style={s.iconBtn}>
+              <ArrowClockwise size={20} weight="bold" color={colors.primary} />
+            </Pressable>
+          ) : null}
+          {onDismiss ? (
+            <Pressable onPress={onDismiss} accessibilityRole="button" accessibilityLabel="Fechar aviso" hitSlop={8} style={s.iconBtn}>
+              <X size={20} weight="bold" color={colors.textSecondary} />
+            </Pressable>
+          ) : null}
         </View>
-      </View>
-
-      {/* Right action / status icon */}
-      <View style={styles.actionWrapper}>
-        {isUploading && (
-          <ActivityIndicator size="small" color="#6338FA" />
-        )}
-
-        {isSuccess && (
-          <CheckCircle size={22} color="#10B981" />
-        )}
-
-        {isError && (
-          <View style={styles.errorActions}>
-            {onRetry && (
-              <TouchableOpacity onPress={onRetry} style={styles.iconBtn} activeOpacity={0.7}>
-                <RotateCcw size={18} color="#6338FA" />
-              </TouchableOpacity>
-            )}
-            {onDismiss && (
-              <TouchableOpacity onPress={onDismiss} style={styles.iconBtn} activeOpacity={0.7}>
-                <X size={18} color={colors.textSecondary} />
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-      </View>
+      ) : null}
     </Animated.View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    top: Platform.OS === 'android' ? 98 : 88,
-    left: 14,
-    right: 14,
-    zIndex: 9999,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
-    elevation: 8,
+const getStyles = (c: ThemeColors) => StyleSheet.create({
+  card: {
+    position: 'absolute', left: 16, right: 16, zIndex: 40, flexDirection: 'row', alignItems: 'center', gap: 12,
+    padding: 10, paddingRight: 14, borderRadius: 20, backgroundColor: c.card,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.border,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 16, elevation: 8,
   },
-  thumbnailWrapper: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    overflow: 'hidden',
-    backgroundColor: '#333',
-  },
-  thumbnail: {
-    width: '100%',
-    height: '100%',
-  },
-  contentWrapper: {
-    flex: 1,
-    marginHorizontal: 12,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
-  title: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  subtitle: {
-    fontSize: 11.5,
-    marginBottom: 6,
-  },
-  progressTrack: {
-    height: 3.5,
-    borderRadius: 2,
-    overflow: 'hidden',
-    width: '100%',
-  },
-  progressBar: {
-    height: '100%',
-    borderRadius: 2,
-  },
-  actionWrapper: {
-    width: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  errorActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  iconBtn: {
-    padding: 4,
-  },
+  thumb: { width: 48, height: 48, borderRadius: 14, backgroundColor: c.surface },
+  texts: { flex: 1, minWidth: 0, gap: 1 },
+  title: { fontSize: 15, fontWeight: '700', color: c.textPrimary },
+  subtitle: { fontSize: 13, color: c.textSecondary },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  iconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
 });
