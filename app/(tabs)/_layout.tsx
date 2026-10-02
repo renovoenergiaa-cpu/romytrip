@@ -1,7 +1,8 @@
 import { Tabs, Redirect, useRouter } from 'expo-router';
 import { Home, Users, MessageCircle, User, Plus } from 'lucide-react-native';
 import { StyleSheet, View, DeviceEventEmitter, Platform, ActivityIndicator } from 'react-native';
-import { useTheme } from '../../src/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { brandGradient, useTheme } from '../../src/theme';
 import { useConversations } from '../../src/hooks/useMessenger';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
@@ -9,7 +10,7 @@ import { useAuth } from '../../src/context/AuthContext';
 export default function TabLayout() {
   const router = useRouter();
   const { session, isLoading } = useAuth();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { data: conversations } = useConversations();
   const unreadCount = conversations?.reduce((acc, curr) => acc + (curr.unread_count || 0), 0) || 0;
@@ -71,11 +72,17 @@ export default function TabLayout() {
         name="create"
         options={{
           title: '',
+          tabBarAccessibilityLabel: 'Criar publicação',
           tabBarIcon: () => (
             <View style={styles.createButtonContainer}>
-              <View style={[styles.createGradient, isDark && styles.createGradientDark]}>
-                <Plus size={22} color={isDark ? '#FFF' : '#000'} strokeWidth={3} />
-              </View>
+              <LinearGradient
+                colors={brandGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.createGradient}
+              >
+                <Plus size={22} color="#FFFFFF" strokeWidth={2.75} />
+              </LinearGradient>
             </View>
           ),
         }}
@@ -121,24 +128,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   createGradient: {
-    width: 44,
+    width: 46,
     height: 32,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 10,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    borderLeftWidth: 3,
-    borderLeftColor: '#6338FA',
-    borderRightWidth: 3,
-    borderRightColor: '#D936B4',
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderTopColor: '#E5E7EB',
-    borderBottomColor: '#E5E7EB',
-  },
-  createGradientDark: {
-    backgroundColor: '#2A2A2A',
-    borderTopColor: '#3A3A3C',
-    borderBottomColor: '#3A3A3C',
+    shadowColor: '#6338FA',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.28,
+    shadowRadius: 6,
+    elevation: 3,
   },
 });

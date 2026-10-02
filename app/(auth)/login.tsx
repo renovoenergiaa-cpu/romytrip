@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -18,11 +18,12 @@ import { supabase } from '../../src/lib/supabase';
 import { useAuth, checkProfileComplete } from '../../src/context/AuthContext';
 import { useOnboardingStore } from '../../src/store/onboardingStore';
 import { CustomInput } from '../../src/components/CustomInput';
-import { colors, spacing, typography } from '../../src/theme';
+import { spacing, typography, useTheme, type ThemeColors } from '../../src/theme';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { makeRedirectUri } from 'expo-auth-session';
-import { AlertCircle } from 'lucide-react-native';
+import { AlertCircle, CheckCircle2 } from 'lucide-react-native';
+import { FontAwesome } from '@expo/vector-icons';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -38,6 +39,9 @@ export default function LoginScreen() {
   const [isSigningUp, setIsSigningUp] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const { colors, isDark } = useTheme();
+  const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
 
   // Redireciona declarativamente se autenticado com perfil completo
   if (session && !isSigningUp && isProfileComplete === true) {
@@ -45,6 +49,7 @@ export default function LoginScreen() {
   }
 
   const showAlert = (title: string, message: string) => {
+    setInfoMessage(null);
     setErrorMessage(message);
     if (Platform.OS !== 'web') {
       Alert.alert(title, message);
@@ -100,6 +105,29 @@ export default function LoginScreen() {
       }
     } catch (err: any) {
       showAlert('Erro', translateAuthError(err));
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      showAlert('Recuperar senha', 'Digite seu e-mail acima e toque em "Esqueci minha senha" de novo.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const redirectTo =
+        Platform.OS === 'web' && typeof window !== 'undefined'
+          ? `${window.location.origin}/reset-password`
+          : Linking.createURL('/reset-password');
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo });
+      if (error) throw error;
+      setErrorMessage(null);
+      setInfoMessage(`Enviamos um link para ${cleanEmail}. Abra o e-mail para criar uma nova senha.`);
+    } catch (err: any) {
+      showAlert('Recuperar senha', translateAuthError(err));
+    } finally {
       setLoading(false);
     }
   };
@@ -281,11 +309,14 @@ export default function LoginScreen() {
           <View style={styles.innerCard}>
             {/* Header */}
             <View style={styles.header}>
-              <Image
-                source={require('../../assets/images/logo.png')}
-                style={styles.logo}
-                resizeMode="contain"
-              />
+              <View style={styles.logoTile}>
+                <Image
+                  source={require('../../assets/images/logo-mark.png')}
+                  style={styles.logo}
+                  resizeMode="contain"
+                  accessibilityLabel="Romy"
+                />
+              </View>
               <Text style={styles.title}>
                 {mode === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta'}
               </Text>
@@ -336,7 +367,10 @@ export default function LoginScreen() {
                 onPress={() => {
                   setMode('login');
                   setErrorMessage(null);
+                  setInfoMessage(null);
                 }}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: mode === 'login' }}
                 activeOpacity={0.8}
               >
                 <Text style={[styles.tabText, mode === 'login' && styles.tabTextActive]}>
@@ -348,7 +382,10 @@ export default function LoginScreen() {
                 onPress={() => {
                   setMode('signup');
                   setErrorMessage(null);
+                  setInfoMessage(null);
                 }}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: mode === 'signup' }}
                 activeOpacity={0.8}
               >
                 <Text style={[styles.tabText, mode === 'signup' && styles.tabTextActive]}>
@@ -363,6 +400,9 @@ export default function LoginScreen() {
                 placeholder="E-mail"
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoComplete="email"
+                textContentType="emailAddress"
+                accessibilityLabel="E-mail"
                 value={email}
                 onChangeText={(t) => {
                   setEmail(t);
@@ -373,6 +413,10 @@ export default function LoginScreen() {
               <CustomInput
                 placeholder={mode === 'signup' ? 'Crie uma senha (mínimo 6 dígitos)' : 'Senha'}
                 secureTextEntry
+                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                textContentType={mode === 'signup' ? 'newPassword' : 'password'}
+                accessibilityLabel="Senha"
+                onSubmitEditing={mode === 'login' ? handleLogin : handleSignup}
                 value={password}
                 onChangeText={(t) => {
                   setPassword(t);
@@ -380,10 +424,28 @@ export default function LoginScreen() {
                 }}
               />
 
+              {mode === 'login' && (
+                <TouchableOpacity
+                  onPress={handleForgotPassword}
+                  disabled={loading}
+                  style={styles.forgotButton}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.forgotText}>Esqueci minha senha</Text>
+                </TouchableOpacity>
+              )}
+
               {errorMessage ? (
                 <View style={styles.errorBanner} accessibilityRole="alert">
-                  <AlertCircle size={16} color="#DC2626" style={{ marginRight: 8 }} />
+                  <AlertCircle size={16} color={colors.error} style={{ marginRight: 8 }} />
                   <Text style={styles.errorBannerText}>{errorMessage}</Text>
+                </View>
+              ) : null}
+
+              {infoMessage ? (
+                <View style={styles.infoBanner} accessibilityRole="alert">
+                  <CheckCircle2 size={16} color={colors.success} style={{ marginRight: 8 }} />
+                  <Text style={styles.infoBannerText}>{infoMessage}</Text>
                 </View>
               ) : null}
 
@@ -395,7 +457,7 @@ export default function LoginScreen() {
                   activeOpacity={0.8}
                 >
                   {loading ? (
-                    <ActivityIndicator color={colors.surface} />
+                    <ActivityIndicator color={colors.onPrimary} />
                   ) : (
                     <Text style={styles.primaryButtonText}>Entrar</Text>
                   )}
@@ -408,9 +470,9 @@ export default function LoginScreen() {
                   activeOpacity={0.8}
                 >
                   {loading ? (
-                    <ActivityIndicator color={colors.surface} />
+                    <ActivityIndicator color={colors.onPrimary} />
                   ) : (
-                    <Text style={styles.primaryButtonText}>Criar conta e montar perfil →</Text>
+                    <Text style={styles.primaryButtonText}>Criar conta e montar perfil</Text>
                   )}
                 </TouchableOpacity>
               )}
@@ -442,7 +504,10 @@ export default function LoginScreen() {
                 onPress={() => handleOAuthLogin('google')}
                 disabled={loading}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Continuar com Google"
               >
+                <FontAwesome name="google" size={18} color={colors.textPrimary} />
                 <Text style={styles.socialButtonText}>Google</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -450,30 +515,13 @@ export default function LoginScreen() {
                 onPress={() => handleOAuthLogin('apple')}
                 disabled={loading}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Continuar com Apple"
               >
+                <FontAwesome name="apple" size={20} color={colors.textPrimary} />
                 <Text style={styles.socialButtonText}>Apple</Text>
               </TouchableOpacity>
             </View>
-
-            {/* Alternador inferior */}
-            <TouchableOpacity
-              style={styles.bottomSwitch}
-              onPress={() => setMode(mode === 'login' ? 'signup' : 'login')}
-            >
-              <Text style={styles.bottomSwitchText}>
-                {mode === 'login' ? (
-                  <>
-                    Não tem uma conta?{' '}
-                    <Text style={styles.bottomSwitchHighlight}>Cadastre-se</Text>
-                  </>
-                ) : (
-                  <>
-                    Já possui uma conta?{' '}
-                    <Text style={styles.bottomSwitchHighlight}>Fazer login</Text>
-                  </>
-                )}
-              </Text>
-            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -534,7 +582,7 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors, isDark: boolean) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
@@ -554,10 +602,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.lg,
   },
+  // O logo é um PNG com fundo branco: vira um "ícone de app" em vez de um quadrado solto
+  logoTile: {
+    width: 84,
+    height: 84,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+    borderWidth: isDark ? 0 : StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: isDark ? 0.45 : 0.16,
+    shadowRadius: 18,
+    elevation: 6,
+  },
   logo: {
-    width: 76,
-    height: 76,
-    marginBottom: spacing.md,
+    width: 64,
+    height: 62,
+  },
+  forgotButton: {
+    alignSelf: 'flex-end',
+    paddingVertical: spacing.xs,
+    marginTop: -spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  forgotText: {
+    ...typography.label,
+    color: colors.primary,
   },
   title: {
     ...typography.h1,
@@ -588,8 +662,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 10,
   },
+  // Seletor discreto: o único roxo cheio da tela é o botão de ação
   tabButtonActive: {
-    backgroundColor: colors.primary,
+    // No escuro o "card" é mais escuro que o trilho; a aba ativa precisa clarear
+    backgroundColor: isDark ? '#2C2C33' : colors.card,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: isDark ? 0.4 : 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   tabText: {
     ...typography.body,
@@ -598,7 +679,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   tabTextActive: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
   },
   form: {
     marginBottom: spacing.md,
@@ -624,7 +705,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   primaryButtonText: {
-    color: colors.surface,
+    color: colors.onPrimary,
     ...typography.body,
     fontWeight: '700',
     fontSize: 16,
@@ -651,31 +732,20 @@ const styles = StyleSheet.create({
   },
   socialButton: {
     flex: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 12,
     height: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.card,
   },
   socialButtonText: {
     color: colors.textPrimary,
     ...typography.body,
     fontWeight: '600',
-  },
-  bottomSwitch: {
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-  },
-  bottomSwitchText: {
-    ...typography.body,
-    color: colors.textSecondary,
-    fontSize: 14,
-  },
-  bottomSwitchHighlight: {
-    color: colors.primary,
-    fontWeight: '700',
   },
   lgpdNoticeContainer: {
     marginTop: spacing.md,
@@ -756,10 +826,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   resumeCard: {
-    backgroundColor: 'rgba(99, 56, 250, 0.08)',
+    backgroundColor: colors.primarySoft,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(99, 56, 250, 0.25)',
+    borderColor: colors.primarySoft,
     padding: spacing.md,
     marginBottom: spacing.md,
     alignItems: 'center',
@@ -793,30 +863,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   resumePrimaryBtnText: {
-    color: '#FFF',
-    fontSize: 12,
+    color: colors.onPrimary,
+    fontSize: 13,
     fontWeight: '700',
   },
   resumeSecondaryBtn: {
     flex: 1,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: colors.errorSoft,
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.25)',
   },
   resumeSecondaryBtnText: {
-    color: '#EF4444',
-    fontSize: 12,
+    color: colors.error,
+    fontSize: 13,
     fontWeight: '600',
   },
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#F87171',
+    backgroundColor: colors.errorSoft,
     borderRadius: 12,
     padding: spacing.md,
     marginTop: spacing.xs,
@@ -825,7 +891,23 @@ const styles = StyleSheet.create({
   errorBannerText: {
     flex: 1,
     ...typography.caption,
-    color: '#B91C1C',
+    color: colors.error,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  infoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.successSoft,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  infoBannerText: {
+    flex: 1,
+    ...typography.caption,
+    color: colors.success,
     fontWeight: '600',
     fontSize: 13,
   },

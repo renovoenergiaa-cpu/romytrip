@@ -1,5 +1,6 @@
+import { useMemo, useState } from 'react';
 import { TextInput, TextInputProps, StyleSheet, View, Text } from 'react-native';
-import { colors, spacing, typography } from '../theme';
+import { spacing, typography, useTheme, type ThemeColors } from '../theme';
 import { LucideIcon } from 'lucide-react-native';
 
 interface CustomInputProps extends TextInputProps {
@@ -8,15 +9,22 @@ interface CustomInputProps extends TextInputProps {
   error?: string;
 }
 
-export function CustomInput({ label, icon: Icon, error, style, ...props }: CustomInputProps) {
+export function CustomInput({ label, icon: Icon, error, style, onFocus, onBlur, ...props }: CustomInputProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
+  const [focused, setFocused] = useState(false);
+
   return (
     <View style={styles.container}>
       {label && <Text style={styles.label}>{label}</Text>}
-      <View style={[styles.inputContainer, error && styles.inputError]}>
-        {Icon && <Icon size={20} color={colors.textMuted} style={styles.icon} />}
+      <View style={[styles.inputContainer, focused && styles.inputFocused, error && styles.inputError]}>
+        {Icon && <Icon size={20} color={focused ? colors.primary : colors.textMuted} style={styles.icon} />}
         <TextInput
           style={[styles.input, style]}
           placeholderTextColor={colors.textMuted}
+          selectionColor={colors.primary}
+          onFocus={(e) => { setFocused(true); onFocus?.(e); }}
+          onBlur={(e) => { setFocused(false); onBlur?.(e); }}
           {...props}
         />
       </View>
@@ -25,7 +33,7 @@ export function CustomInput({ label, icon: Icon, error, style, ...props }: Custo
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     marginBottom: spacing.md,
   },
@@ -42,9 +50,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: spacing.md,
     height: 52,
+    // Borda transparente reservada: o foco não desloca o layout
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  inputFocused: {
+    borderColor: colors.primary,
+    backgroundColor: colors.card,
   },
   inputError: {
-    borderWidth: 1,
     borderColor: colors.error,
   },
   icon: {
