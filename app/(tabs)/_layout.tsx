@@ -3,6 +3,7 @@ import { Home, Users, MessageCircle, User, Plus } from 'lucide-react-native';
 import { StyleSheet, View, DeviceEventEmitter, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { brandGradient, useTheme } from '../../src/theme';
+import { fontFamilyFor } from '../../src/theme/fonts';
 import { useConversations } from '../../src/hooks/useMessenger';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
@@ -45,10 +46,13 @@ export default function TabLayout() {
           paddingBottom: bottomPadding + 4,
           paddingTop: 6,
         },
+        // A barra de abas usa o próprio Text do React Navigation: a fonte do Romy vai aqui
+        tabBarLabelStyle: { fontFamily: fontFamilyFor('600') },
         tabBarBadgeStyle: {
           backgroundColor: colors.primary,
           color: '#FFFFFF',
           fontSize: 10,
+          fontFamily: fontFamilyFor('700'),
         },
       }}
     >

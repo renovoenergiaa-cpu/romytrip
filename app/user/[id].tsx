@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, Alert } from 'react-native';
+import { View, StyleSheet, Image, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, Alert } from 'react-native';
+import { Text } from '../../src/components/ui/Text';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, MapPin, BadgeCheck, Sparkles, UserX } from 'lucide-react-native';

@@ -1,18 +1,8 @@
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Image,
-  Dimensions
+  View, StyleSheet, TouchableOpacity, SafeAreaView, KeyboardAvoidingView, Platform, ScrollView,
+  ActivityIndicator, Alert, Modal, Image, Dimensions,
 } from 'react-native';
+import { Text } from '../../src/components/ui/Text';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {

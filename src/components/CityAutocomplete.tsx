@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, TextInput, TouchableOpacity, Text, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
+import { Text, TextInput } from './ui/Text';
 import { Search, MapPin } from 'lucide-react-native';
 import { colors, spacing, typography } from '../theme';
 

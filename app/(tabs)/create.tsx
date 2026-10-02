@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, DeviceEventEmitter } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator, DeviceEventEmitter } from 'react-native';
+import { Text } from '../../src/components/ui/Text';
 import { useRouter } from 'expo-router';
 import { Plus, ArrowLeft } from 'lucide-react-native';
 import { useTheme, spacing, typography, radius } from '../../src/theme';

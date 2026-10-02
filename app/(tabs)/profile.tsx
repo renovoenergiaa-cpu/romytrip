@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import {
-  ActivityIndicator, DeviceEventEmitter, KeyboardAvoidingView, Modal, Pressable,
-  ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, DeviceEventEmitter, KeyboardAvoidingView, Modal, Pressable, ScrollView,
+  StyleSheet, View,
 } from 'react-native';
+import { Text, TextInput } from '../../src/components/ui/Text';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';

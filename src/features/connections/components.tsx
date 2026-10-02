@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Text } from '../../components/ui/Text';
 import { useTheme, type ThemeColors } from '../../theme';
 import { Sheet } from '../../components/Sheet';
 import { Avatar, ChoiceChip } from '../onboarding/components';

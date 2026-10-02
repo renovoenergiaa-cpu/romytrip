@@ -1,18 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  Image,
-  ScrollView,
-  SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  Modal,
+  View, StyleSheet, TouchableOpacity, Alert, Image, ScrollView, SafeAreaView, KeyboardAvoidingView,
+  Platform, ActivityIndicator, Modal,
 } from 'react-native';
+import { Text } from '../../src/components/ui/Text';
 import { useRouter, Redirect } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 import { useAuth, checkProfileComplete } from '../../src/context/AuthContext';

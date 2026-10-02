@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform, StatusBar, ScrollView, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Alert, Platform, StatusBar, ScrollView, ActivityIndicator } from 'react-native';
+import { Text } from '../src/components/ui/Text';
 import { useRouter } from 'expo-router';
 import { LogOut, User, Shield, Bell, HelpCircle, Moon, Sun, Smartphone, Trash2 } from 'lucide-react-native';
 import { useState } from 'react';

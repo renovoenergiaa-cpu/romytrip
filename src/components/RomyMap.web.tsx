@@ -1,5 +1,6 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from './ui/Text';
 import { useTheme, type ThemeColors } from '../theme';
 import { eventIcon } from '../features/events/eventIcons';
 import { Compass, MapPin } from '../features/onboarding/icons';

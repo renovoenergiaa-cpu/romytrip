@@ -1,15 +1,8 @@
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  ScrollView, 
-  Switch, 
-  SafeAreaView, 
-  Platform, 
-  StatusBar 
+import {
+  View, StyleSheet, TouchableOpacity, ScrollView, Switch, SafeAreaView, Platform, StatusBar,
 } from 'react-native';
+import { Text } from '../src/components/ui/Text';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Bell, MessageSquare, UserPlus, Users, Sparkles, Mail, ChevronRight } from 'lucide-react-native';
 import { spacing, typography, useTheme } from '../src/theme';

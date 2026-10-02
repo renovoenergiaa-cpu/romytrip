@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, StatusBar } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Platform, StatusBar } from 'react-native';
+import { Text } from './ui/Text';
 import { ChevronLeft } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, spacing, typography, radius } from '../theme';

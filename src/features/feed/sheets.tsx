@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import {
-  ActivityIndicator, FlatList, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, FlatList, Image, Platform, Pressable, ScrollView, StyleSheet, View,
 } from 'react-native';
+import { Text, TextInput } from '../../components/ui/Text';
 import { useTheme, type ThemeColors } from '../../theme';
 import { Sheet } from '../../components/Sheet';
 import { Avatar } from '../onboarding/components';

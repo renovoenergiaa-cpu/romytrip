@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { TextInput, TextInputProps, StyleSheet, View, Text } from 'react-native';
+import { TextInputProps, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from './ui/Text';
 import { spacing, typography, useTheme, type ThemeColors } from '../theme';
 import { LucideIcon } from 'lucide-react-native';
 

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Image, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Modal, TouchableOpacity, ScrollView, Image, ActivityIndicator } from 'react-native';
+import { Text } from './ui/Text';
 import { LinearGradient } from 'expo-linear-gradient';
 import { X, Sparkles, MapPin, Clock, Users, HelpCircle, ChevronRight, Star } from 'lucide-react-native';
 import { useRouter } from 'expo-router';

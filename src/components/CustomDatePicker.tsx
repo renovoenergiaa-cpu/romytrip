@@ -1,13 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  Platform,
-  Modal,
+  View, StyleSheet, TouchableOpacity, Platform, Modal,
 } from 'react-native';
+import { Text, TextInput } from './ui/Text';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react-native';
 import { colors, spacing, typography, useTheme } from '../theme';

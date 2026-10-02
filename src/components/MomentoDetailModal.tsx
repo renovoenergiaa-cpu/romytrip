@@ -1,16 +1,9 @@
 import React from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  Image,
-  ScrollView,
-  Dimensions,
+  View, StyleSheet, Modal, TouchableOpacity, TouchableWithoutFeedback, Image, ScrollView, Dimensions,
   Platform,
 } from 'react-native';
+import { Text } from './ui/Text';
 import {
   X,
   MoreHorizontal,

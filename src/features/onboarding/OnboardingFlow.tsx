@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Animated, Easing, Image, KeyboardAvoidingView, Platform, Pressable,
-  ScrollView, StyleSheet, Text, View,
+  ScrollView, StyleSheet, View,
 } from 'react-native';
+import { Text } from '../../components/ui/Text';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';

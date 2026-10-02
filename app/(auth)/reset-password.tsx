@@ -1,15 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  SafeAreaView,
-  KeyboardAvoidingView,
-  Platform,
+  View, StyleSheet, TouchableOpacity, ActivityIndicator, SafeAreaView, KeyboardAvoidingView, Platform,
   Alert,
 } from 'react-native';
+import { Text } from '../../src/components/ui/Text';
 import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { KeyRound } from 'lucide-react-native';

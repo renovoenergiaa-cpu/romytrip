@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '../../src/components/ui/Text';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useTheme, type ThemeColors } from '../../src/theme';
+import { fontFamilyFor } from '../../src/theme/fonts';
 import {
   useCommunity, useCommunityMembers, useCommunityPosts, useCreateCommunityPost, useDeleteCommunity,
   useDeleteCommunityPost, useJoinCommunity, useLeaveCommunity, useUpdateCommunityImage,
@@ -386,7 +388,8 @@ const getStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 16, paddingBottom: 8,
   },
   headerBg: { backgroundColor: c.background, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
-  headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: c.textPrimary, textAlign: 'center', letterSpacing: -0.2 },
+  // Animated.Text não passa pelo Text do app: a família do peso vai direto
+  headerTitle: { flex: 1, fontSize: 17, fontFamily: fontFamilyFor('700'), color: c.textPrimary, textAlign: 'center', letterSpacing: -0.2 },
   roundBtn: {
     width: 44, height: 44, borderRadius: 22, backgroundColor: c.card, alignItems: 'center', justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth, borderColor: c.border,

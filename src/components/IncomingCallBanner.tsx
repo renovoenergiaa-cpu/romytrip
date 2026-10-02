@@ -1,13 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Animated,
-  Image,
-  Dimensions,
+  View, StyleSheet, TouchableOpacity, Animated, Image, Dimensions,
 } from 'react-native';
+import { Text } from './ui/Text';
 import { Phone, PhoneOff, Video } from 'lucide-react-native';
 import { useGlobalNotification } from '../context/GlobalNotificationContext';
 import { useTheme } from '../theme';

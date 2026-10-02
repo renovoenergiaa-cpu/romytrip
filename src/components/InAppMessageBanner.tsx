@@ -1,12 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Animated,
-  Image,
+  View, StyleSheet, TouchableOpacity, Animated, Image,
 } from 'react-native';
+import { Text } from './ui/Text';
 import { useGlobalNotification } from '../context/GlobalNotificationContext';
 
 export function InAppMessageBanner({ onNavigate }: { onNavigate: (conversationId: string) => void }) {

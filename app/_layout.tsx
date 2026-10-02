@@ -1,8 +1,16 @@
 import { Stack, useRouter } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState, Component } from 'react';
+import { useEffect, useState, Component } from 'react';
+import * as SplashScreen from 'expo-splash-screen';
+import { useFonts } from 'expo-font';
+// Um import por peso: só os 4 arquivos usados entram no app (o pacote tem 14)
+import { PlusJakartaSans_400Regular } from '@expo-google-fonts/plus-jakarta-sans/400Regular';
+import { PlusJakartaSans_600SemiBold } from '@expo-google-fonts/plus-jakarta-sans/600SemiBold';
+import { PlusJakartaSans_700Bold } from '@expo-google-fonts/plus-jakarta-sans/700Bold';
+import { PlusJakartaSans_800ExtraBold } from '@expo-google-fonts/plus-jakarta-sans/800ExtraBold';
 import { AuthProvider } from '../src/context/AuthContext';
-import { KeyboardAvoidingView, Platform, View, Text, ScrollView } from 'react-native';
+import { KeyboardAvoidingView, Platform, View, ScrollView } from 'react-native';
+import { Text } from '../src/components/ui/Text';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useTheme } from '../src/theme';
 import { GlobalNotificationProvider } from '../src/context/GlobalNotificationContext';
@@ -72,9 +80,23 @@ function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+// A tela de abertura fica até a fonte carregar: o texto nunca aparece numa fonte e depois troca
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 export default function RootLayout() {
   const [queryClient] = useState(() => new QueryClient());
   const { isDark } = useTheme();
+  const [fontsLoaded, fontError] = useFonts({
+    PlusJakartaSans_400Regular, PlusJakartaSans_600SemiBold, PlusJakartaSans_700Bold, PlusJakartaSans_800ExtraBold,
+  });
+  // Se a fonte falhar, o app abre com a do sistema em vez de travar
+  const ready = fontsLoaded || !!fontError;
+
+  useEffect(() => {
+    if (ready) SplashScreen.hideAsync().catch(() => {});
+  }, [ready]);
+
+  if (!ready) return null;
 
   return (
     <ErrorBoundary>

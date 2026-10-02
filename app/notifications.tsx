@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, ActivityIndicator, ImageBackground, Platform, StatusBar } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, ActivityIndicator, ImageBackground, Platform, StatusBar } from 'react-native';
+import { Text } from '../src/components/ui/Text';
 import { Sparkles, Check, X, ChevronLeft } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from './ui/Text';
 import { Sheet } from './Sheet';
 import { useTheme, type ThemeColors } from '../theme';
 import { useRequestJoinEvent, useEventRequests, useUpdateEventRequest, useUserEventRequestStatus } from '../hooks/useEvents';

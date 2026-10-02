@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from './ui/Text';
 import * as Haptics from 'expo-haptics';
 import { Sheet } from './Sheet';
 import { useTheme, type ThemeColors } from '../theme';

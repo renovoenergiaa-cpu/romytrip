@@ -1,5 +1,6 @@
 import { forwardRef, useMemo, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
+import { Platform, Pressable, StyleSheet, View, type TextInputProps } from 'react-native';
+import { Text, TextInput } from '../../components/ui/Text';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';

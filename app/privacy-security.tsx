@@ -1,20 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  ScrollView, 
-  Switch,
-  Modal,
-  KeyboardAvoidingView,
-  TextInput, 
-  Alert, 
-  ActivityIndicator, 
-  SafeAreaView, 
-  Platform, 
-  StatusBar 
+import {
+  View, StyleSheet, TouchableOpacity, ScrollView, Switch, Modal, KeyboardAvoidingView, Alert,
+  ActivityIndicator, SafeAreaView, Platform, StatusBar,
 } from 'react-native';
+import { Text, TextInput } from '../src/components/ui/Text';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Shield, Eye, MapPin, Key, Smartphone, CheckCircle, X } from 'lucide-react-native';
 import { supabase } from '../src/lib/supabase';

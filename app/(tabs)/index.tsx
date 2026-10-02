@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, DeviceEventEmitter, FlatList, Platform, Pressable, RefreshControl, Share, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, DeviceEventEmitter, FlatList, Platform, Pressable, RefreshControl, Share, StyleSheet, View } from 'react-native';
+import { Text } from '../../src/components/ui/Text';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';

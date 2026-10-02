@@ -1,4 +1,5 @@
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
+import { Text } from '../src/components/ui/Text';
 import { useState } from 'react';
 import { Redirect } from 'expo-router';
 import { supabase } from '../src/lib/supabase';

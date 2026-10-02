@@ -52,7 +52,7 @@ html, body {
   flex: 1;
 }
 input, textarea, select {
-  font-size: 16px !important;
+  font-size: 16px; /* mínimo contra o zoom do iPhone; o TextInput do app (src/components/ui/Text) garante 16px ou mais */
   user-select: text;
   -webkit-user-select: text;
   caret-color: #6338FA;

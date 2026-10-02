@@ -1,19 +1,9 @@
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  ScrollView,
-  Modal,
-  KeyboardAvoidingView,
-  TextInput, 
-  Alert, 
-  ActivityIndicator, 
-  SafeAreaView, 
-  Platform, 
-  StatusBar 
+import {
+  View, StyleSheet, TouchableOpacity, ScrollView, Modal, KeyboardAvoidingView, Alert,
+  ActivityIndicator, SafeAreaView, Platform, StatusBar,
 } from 'react-native';
+import { Text, TextInput } from '../src/components/ui/Text';
 import { useRouter } from 'expo-router';
 import { modalKeyboardBehavior } from '../src/lib/keyboard';
 import { 

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from './ui/Text';
 import { Sheet } from './Sheet';
 import { useTheme, type ThemeColors } from '../theme';
 import { useCreateCommunity } from '../hooks/useCommunities';

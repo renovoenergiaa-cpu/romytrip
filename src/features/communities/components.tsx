@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Image, Platform, Pressable, ScrollView, StyleSheet, View,
 } from 'react-native';
+import { Text, TextInput } from '../../components/ui/Text';
 import * as ImagePicker from 'expo-image-picker';
 import { Image as ExpoImage } from 'expo-image';
 import { useTheme, type ThemeColors } from '../../theme';
