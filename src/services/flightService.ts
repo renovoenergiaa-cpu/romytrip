@@ -7,6 +7,8 @@
  * 4. High-Fidelity Market Benchmark Fallback Engine (Real airlines, schedules and booking URLs)
  */
 
+import { supabase } from '../lib/supabase';
+
 export interface FlightResult {
   id: string;
   airline: string;
@@ -115,44 +117,29 @@ export function getCarrierLogo(carrierCode: string): string {
   return AIRLINE_LOGOS[code] || `https://assets.duffel.com/img/airlines/for-light-background/${code}.png`;
 }
 
-const DUFFEL_TOKEN = process.env.EXPO_PUBLIC_DUFFEL_ACCESS_TOKEN || '';
-const SERPAPI_KEY = process.env.EXPO_PUBLIC_SERPAPI_KEY || '';
+// Duffel e SerpApi são chamados via Edge Function `flight-proxy`: as chaves ficam no servidor.
+async function callFlightProxy(body: Record<string, unknown>): Promise<any | null> {
+  const { data, error } = await supabase.functions.invoke('flight-proxy', { body });
+  if (error) {
+    console.warn('flight-proxy error:', error.message);
+    return null;
+  }
+  return data;
+}
 
 /**
  * Creates an exact Duffel Links checkout session for a specific offer.
  * Opens the official Duffel checkout page displaying the exact same price and flight.
  */
 export async function createDuffelCheckoutLink(offerId: string): Promise<string | null> {
-  const token = DUFFEL_TOKEN.trim();
-  if (!token || !offerId) return null;
-
+  if (!offerId) return null;
   try {
-    const res = await fetch('https://api.duffel.com/links/sessions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Duffel-Version': 'v2',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        data: {
-          offer_id: offerId,
-          success_url: 'https://romy.app/booking-success',
-          failure_url: 'https://romy.app/booking-failed',
-          abandonment_url: 'https://romy.app/booking-abandoned',
-          reference: `romy-${Date.now()}`,
-        },
-      }),
-    });
-
-    if (res.ok) {
-      const json = await res.json();
-      return json.data?.url || null;
-    }
+    const json = await callFlightProxy({ action: 'duffel-link', offerId });
+    return json?.data?.url || null;
   } catch (err) {
     console.warn('Failed to create Duffel link session:', err);
+    return null;
   }
-  return null;
 }
 
 /**
@@ -457,9 +444,6 @@ export async function searchGoogleFlightsLive(params: FlightSearchParams): Promi
  * Filters out sandbox test airlines ("Duffel Airways") so only real airlines appear.
  */
 async function searchDuffel(params: FlightSearchParams): Promise<FlightResult[]> {
-  const token = DUFFEL_TOKEN.trim();
-  if (!token || token.length < 8) return [];
-
   const cabinMap: Record<string, string> = {
     'Econômica': 'economy',
     'Executiva': 'business',
@@ -483,31 +467,14 @@ async function searchDuffel(params: FlightSearchParams): Promise<FlightResult[]>
     });
   }
 
-  const passengersList = Array.from({ length: params.passengers || 1 }).map(() => ({
-    type: 'adult',
-  }));
-
   try {
-    const response = await fetch('https://api.duffel.com/air/offer_requests?return_offers=true', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Duffel-Version': 'v2',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        data: {
-          slices,
-          passengers: passengersList,
-          cabin_class: cabinMap[params.cabinClass] || 'economy',
-        },
-      }),
+    const json = await callFlightProxy({
+      action: 'duffel-search',
+      slices,
+      passengers: params.passengers || 1,
+      cabinClass: cabinMap[params.cabinClass] || 'economy',
     });
-
-    if (!response.ok) return [];
-
-    const json = await response.json();
-    const offers = json.data?.offers;
+    const offers = json?.data?.offers;
 
     if (Array.isArray(offers) && offers.length > 0) {
       // Filter out test sandbox airline "Duffel Airways"
@@ -618,21 +585,15 @@ async function searchDuffel(params: FlightSearchParams): Promise<FlightResult[]>
  * 3. SerpApi Google Flights API (serpapi.com)
  */
 async function searchSerpApiGoogleFlights(params: FlightSearchParams): Promise<FlightResult[]> {
-  const token = SERPAPI_KEY.trim();
-  if (!token || token.length < 8) return [];
-
-  const isoDep = toISODate(params.departureDate);
-  let url = `https://serpapi.com/search.json?engine=google_flights&departure_id=${params.originCode}&arrival_id=${params.destCode}&outbound_date=${isoDep}&currency=BRL&hl=pt&gl=br&api_key=${token}`;
-
-  if (params.returnDate && params.returnDate.length === 10) {
-    url += `&return_date=${toISODate(params.returnDate)}`;
-  }
-
   try {
-    const res = await fetch(url);
-    if (!res.ok) return [];
-
-    const json = await res.json();
+    const json = await callFlightProxy({
+      action: 'serpapi-search',
+      origin: params.originCode,
+      destination: params.destCode,
+      outboundDate: toISODate(params.departureDate),
+      returnDate: params.returnDate && params.returnDate.length === 10 ? toISODate(params.returnDate) : undefined,
+    });
+    if (!json) return [];
     const flightGroups = json.best_flights || json.other_flights || [];
 
     if (Array.isArray(flightGroups) && flightGroups.length > 0) {
@@ -932,25 +893,21 @@ export async function searchRealFlights(params: FlightSearchParams): Promise<{
     console.warn('Live Google Flights search attempt finished:', err);
   }
 
-  // 2. Try Duffel API (if token exists)
-  if (DUFFEL_TOKEN && DUFFEL_TOKEN.trim().length > 5) {
-    try {
-      const duffelResults = await searchDuffel(params);
-      if (duffelResults && duffelResults.length > 0) {
-        return { flights: duffelResults, isLive: true, provider: 'duffel' };
-      }
-    } catch (_) {}
-  }
+  // 2. Try Duffel API (via flight-proxy; sem chave configurada no servidor retorna vazio)
+  try {
+    const duffelResults = await searchDuffel(params);
+    if (duffelResults && duffelResults.length > 0) {
+      return { flights: duffelResults, isLive: true, provider: 'duffel' };
+    }
+  } catch (_) {}
 
-  // 3. Try SerpApi (Google Flights)
-  if (SERPAPI_KEY && SERPAPI_KEY.trim().length > 5) {
-    try {
-      const serpResults = await searchSerpApiGoogleFlights(params);
-      if (serpResults && serpResults.length > 0) {
-        return { flights: serpResults, isLive: true, provider: 'serpapi' };
-      }
-    } catch (_) {}
-  }
+  // 3. Try SerpApi (Google Flights, via flight-proxy)
+  try {
+    const serpResults = await searchSerpApiGoogleFlights(params);
+    if (serpResults && serpResults.length > 0) {
+      return { flights: serpResults, isLive: true, provider: 'serpapi' };
+    }
+  } catch (_) {}
 
   // 4. Fallback to high-fidelity realistic benchmark with real airlines and booking links
   const benchmarkFlights = generateRealisticBenchmarkFlights(params);
