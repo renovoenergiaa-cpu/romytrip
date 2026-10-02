@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { sendPushNotification } from '../services/notifications';
+import { isDeletedName } from '../features/chat/format';
 
 // Fetch a single user profile (for the public profile screen)
 export function useUserProfile(userId: string) {
@@ -229,247 +230,188 @@ export function useAcceptedConnections() {
   });
 }
 
-interface DiscoveryFilters {
-  gender: string;
+
+/* ─── Descobrir ─────────────────────────────────────────────────────────────── */
+
+export type GenderPref = 'all' | 'female' | 'male';
+
+export interface DiscoveryFilters {
+  gender: GenderPref;
   minAge: number;
   maxAge: number;
+  /** 'all' ou um id de BUDGET_OPTIONS ('$' … '$$$$') */
   budget: string;
-  isTopRatedMode?: boolean;
 }
 
-export function useDiscoveryTravelers(filters: DiscoveryFilters = { gender: 'Todos', minAge: 18, maxAge: 100, budget: 'Todos' }) {
+export type Traveler = {
+  id: string;
+  name: string;
+  age: number;
+  city?: string | null;
+  sex?: string | null;
+  photos?: string[] | null;
+  bio?: string | null;
+  destination?: string | null;
+  check_in?: string | null;
+  check_out?: string | null;
+  is_flexible?: boolean | null;
+  travel_styles?: string[] | null;
+  interests?: string[] | null;
+  languages?: string[] | null;
+  connection_intentions?: string[] | null;
+  budget?: string | null;
+  /** O que a pessoa tem igual a você (ids gravados no banco) */
+  common: { styles: string[]; intentions: string[]; interests: string[]; languages: string[] };
+  sameDestination: boolean;
+};
+
+const ageOf = (dob?: string | null) => {
+  if (!dob) return null;
+  const [y, m, d] = String(dob).slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const today = new Date();
+  let age = today.getFullYear() - y;
+  if (today.getMonth() + 1 < m || (today.getMonth() + 1 === m && today.getDate() < d)) age--;
+  return age;
+};
+
+// Cadastros antigos gravaram o sexo e o orçamento com outros textos
+const isFemale = (sex?: string | null) => { const v = String(sex ?? '').toLowerCase(); return v.startsWith('f') || v === 'mulher'; };
+const isMale = (sex?: string | null) => { const v = String(sex ?? '').toLowerCase(); return v.startsWith('masc') || v === 'homem'; };
+const LEGACY_BUDGET: Record<string, string> = { 'econômico': '$', economico: '$', moderado: '$$', conforto: '$$$', 'confortável': '$$$', luxo: '$$$$' };
+const budgetId = (b?: string | null) => (b ? LEGACY_BUDGET[b.toLowerCase()] ?? b : '');
+const BUDGET_STEPS = ['$', '$$', '$$$', '$$$$'];
+
+export function useDiscoveryTravelers(filters: DiscoveryFilters, enabled = true) {
   return useQuery({
     queryKey: ['discoveryTravelers', filters],
-    queryFn: async () => {
+    enabled,
+    queryFn: async (): Promise<Traveler[]> => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // 0. Fetch current user data to match
-      const { data: currentUserData } = await supabase
-        .from('users')
-        .select('travel_styles, connection_intentions, interests, languages, destination, budget')
-        .eq('id', user.id)
-        .single();
+      const [mine, links] = await Promise.all([
+        supabase
+          .from('users')
+          .select('travel_styles, connection_intentions, interests, languages, destination, budget')
+          .eq('id', user.id)
+          .maybeSingle(),
+        // Quem já tem pedido ou conexão com você (em qualquer status) não aparece de novo
+        supabase
+          .from('connections')
+          .select('sender_id, receiver_id')
+          .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`),
+      ]);
+      if (mine.error) throw mine.error;
+      if (links.error) throw links.error;
 
-      const myStyles: string[] = currentUserData?.travel_styles || [];
-      const myIntentions: string[] = currentUserData?.connection_intentions || [];
-      const myInterests: string[] = currentUserData?.interests || [];
-      const myLanguages: string[] = currentUserData?.languages || [];
-      const myDestination = (currentUserData?.destination || '').split(',')[0].trim().toLowerCase();
-      const myBudget: string = currentUserData?.budget || '';
+      const excluded = new Set<string>([user.id]);
+      (links.data ?? []).forEach((c) => { excluded.add(c.sender_id); excluded.add(c.receiver_id); });
 
-      // 1. Get connections to exclude them from discovery
-      const { data: connections } = await supabase
-        .from('connections')
-        .select('sender_id, receiver_id')
-        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
-      
-      const excludedIds = new Set<string>();
-      excludedIds.add(user.id);
-      
-      if (connections) {
-        connections.forEach(conn => {
-          excludedIds.add(conn.sender_id);
-          excludedIds.add(conn.receiver_id);
-        });
-      }
-
-      // 2. Fetch all users not in the excluded list
-      const excludedArray = Array.from(excludedIds);
-      // 🔒 N-02 Fix: Explicit column list instead of SELECT *
+      // 🔒 N-02: lista explícita de colunas (nunca SELECT * em users)
       const { data, error } = await supabase
         .from('users')
         .select(`
-          id, name, city, sex, photos, bio, destination,
-          check_in, check_out, travel_styles, interests,
-          budget, is_free, created_at, connection_intentions,
-          gender_preference, privacy_settings, dob, languages
+          id, name, city, sex, photos, bio, destination, check_in, check_out, is_flexible,
+          travel_styles, interests, languages, budget, connection_intentions, privacy_settings, dob
         `)
-        .not('id', 'in', `(${excludedArray.join(',')})`)
-        .limit(30);
-
+        .not('id', 'in', `(${[...excluded].join(',')})`)
+        .not('dob', 'is', null) // sem data de nascimento o perfil está incompleto (e a trava de 18+ não se aplica)
+        .limit(60);
       if (error) throw error;
-      let users: any[] = (data as any[]) || [];
 
-      // 🔒 N-04 Fix: Mock users only in DEV. In production, hardcoded IDs and unlicensed
-      // Unsplash photos must never be shown to real users.
-      if (__DEV__ && users.length < 5) {
-        users.unshift({
-          id: 'mock-thadeu',
-          name: 'Thadeu Zan',
-          dob: '1997-04-10', // 29 anos
-          sex: 'Masculino',
-          budget: 'Conforto',
-          city: 'Cabo Frio, RJ',
-          photos: ['https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=800'],
-          bio: 'Gosto de viajar solo e conhecer pessoas para explorar cafés, trilhas e a cidade.',
-          connection_objective: 'Conhecer pessoas para viajar e explorar a cidade.',
-          destination: 'Em casa',
-          work_status: 'Trabalho remoto',
-          coffee_preference: 'Gosta de café',
-          common_interests: ['Café', 'Trilhas', 'Praia', 'Fotografia', 'Música'],
-          languages: ['Português', 'Inglês'],
-          availability: 'Fins de semana e noites',
-          travel_styles: ['Café', 'Trilhas', 'Praia', 'Fotografia', 'Música'],
-          connection_intentions: ['Conhecer pessoas para viajar e explorar a cidade.'],
-          rating: 4.9,
-          is_online: true,
-          is_verified: true,
-        });
-        users.push(
-          {
-            id: 'mock-1',
-            name: 'Ana Silva',
-            dob: '1995-05-15', // ~31 anos
-            sex: 'Feminino',
-            budget: 'Econômico',
-            city: 'São Paulo, Brasil',
-            photos: ['https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=800'],
-            bio: 'Adoro conhecer novas culturas e provar comidas locais!',
-            travel_styles: ['Explorador(a) cultural', 'Mochileiro(a)'],
-            connection_intentions: ['Fazer amizades locais', 'Companhia para eventos'],
-            rating: 4.8,
-            is_online: true
-          },
-          {
-            id: 'mock-2',
-            name: 'Carlos Mendes',
-            dob: '1992-08-20', // ~34 anos
-            sex: 'Masculino',
-            budget: 'Conforto',
-            city: 'Rio de Janeiro, Brasil',
-            photos: ['https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=800'],
-            bio: 'Fotógrafo amador, sempre em busca da melhor paisagem.',
-            travel_styles: ['Roadtrip', 'Amante da natureza'],
-            connection_intentions: ['Rachar despesas', 'Troca de dicas'],
-            rating: 4.5,
-            is_online: true
-          },
-          {
-            id: 'mock-3',
-            name: 'Julia Santos',
-            dob: '2001-11-10', // ~25 anos
-            sex: 'Feminino',
-            budget: 'Luxo',
-            city: 'Florianópolis, Brasil',
-            photos: ['https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800'],
-            bio: 'Praia, sol e boas companhias. Explorando o mundo um passo de cada vez.',
-            travel_styles: ['Férias relaxantes', 'Aventureiro(a)'],
-            connection_intentions: ['Fazer amizades locais', 'Companhia para balada'],
-            rating: 5.0,
-            is_online: true
-          },
-          {
-            id: 'mock-4',
-            name: 'Pedro Alves',
-            dob: '1985-02-25', // ~41 anos
-            sex: 'Masculino',
-            budget: 'Econômico',
-            city: 'Belo Horizonte, Brasil',
-            photos: ['https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800'],
-            bio: 'Sempre com fome, procurando os melhores restaurantes da cidade.',
-            travel_styles: ['Turismo gastronômico', 'Viajante de luxo'],
-            connection_intentions: ['Fazer amizades locais', 'Explorar a cidade a pé'],
-            rating: 4.2,
-            is_online: false
-          }
-        );
-      }
+      const me = mine.data;
+      const my = {
+        styles: (me?.travel_styles ?? []) as string[],
+        intentions: (me?.connection_intentions ?? []) as string[],
+        interests: (me?.interests ?? []) as string[],
+        languages: (me?.languages ?? []) as string[],
+      };
+      const both = (a: string[] | null | undefined, b: string[]) => (a ?? []).filter((x) => b.includes(x));
+      const cityOf = (v?: string | null) => (v ?? '').split(',')[0].trim().toLowerCase();
+      const myDestination = cityOf(me?.destination);
+      const myBudget = budgetId(me?.budget);
 
-      // Remover mock users se já tiverem sido "passados" (estariam em excludedIds)
-      users = users.filter(u => !excludedIds.has(u.id));
+      const people: (Traveler & { score: number })[] = [];
+      for (const u of (data ?? []) as any[]) {
+        const name = String(u.name ?? '').trim();
+        if (!name || isDeletedName(name)) continue;
+        if (u.privacy_settings?.publicProfile === false) continue; // modo invisível
+        const age = ageOf(u.dob);
+        if (age == null || age < 18 || age < filters.minAge || age > filters.maxAge) continue;
+        if (filters.gender === 'female' && !isFemale(u.sex)) continue;
+        if (filters.gender === 'male' && !isMale(u.sex)) continue;
+        if (filters.budget !== 'all' && budgetId(u.budget) !== filters.budget) continue;
 
-      // Se for Top Rated Mode, filtrar apenas online (mockado como is_online para alguns ou simulado)
-      if (filters.isTopRatedMode) {
-        // Simulando que todos retornados do DB teriam rating e online status. Para os mockados, já temos.
-        // Para os não-mockados, vamos dar um rating aleatório baseado no nome apenas para testar.
-        users = users.map(u => ({
-          ...u,
-          rating: u.rating || (4.0 + (u.name.length % 10) / 10), // mock rating between 4.0 and 4.9
-          is_online: u.is_online !== undefined ? u.is_online : (u.name.length % 2 === 0)
-        }));
-        // Filtra apenas online
-        users = users.filter(u => u.is_online);
-      }
-
-      // APLICANDO TODOS OS FILTROS
-      const currentYear = new Date().getFullYear();
-      users = users.filter(u => {
-        // Filtro de Gênero
-        if (filters.gender !== 'Todos') {
-          const normTarget = filters.gender.toLowerCase();
-          const userSex = String(u.sex || '').toLowerCase();
-          if (normTarget === 'feminino' || normTarget === 'mulheres') {
-            if (!userSex.startsWith('f') && userSex !== 'mulher') return false;
-          } else if (normTarget === 'masculino' || normTarget === 'homens') {
-            if (!userSex.startsWith('m') && userSex !== 'homem') return false;
-          }
-        }
-
-        // Filtro de Orçamento
-        if (filters.budget !== 'Todos') {
-          const b = String(u.budget || '').toLowerCase();
-          const target = filters.budget.toLowerCase();
-          if (target === 'econômico' || target === 'economico') {
-            if (b !== 'econômico' && b !== 'economico' && b !== '$') return false;
-          } else if (target === 'conforto') {
-            if (b !== 'conforto' && b !== '$$' && b !== '$$$') return false;
-          } else if (target === 'luxo') {
-            if (b !== 'luxo' && b !== '$$$$') return false;
-          }
-        }
-
-        // Filtro de Idade
-        if (u.dob) {
-          const birthYear = new Date(u.dob).getFullYear();
-          if (!isNaN(birthYear)) {
-            const age = currentYear - birthYear;
-            if (age < filters.minAge || age > filters.maxAge) return false;
-          }
-        }
-        return true;
-      });
-
-      if (users.length === 0) return [];
-
-      // 3. Compatibilidade: pesos maiores para o que mais pesa numa viagem juntos
-      const shared = (a: string[] | null | undefined, b: string[]) => (a || []).filter((x) => b.includes(x)).length;
-      const city = (v?: string | null) => (v || '').split(',')[0].trim().toLowerCase();
-      const BUDGET_STEPS = ['$', '$$', '$$$', '$$$$'];
-
-      const scoredUsers = users.map(u => {
-        const commonCount =
-          shared(u.travel_styles, myStyles) +
-          shared(u.connection_intentions, myIntentions) +
-          shared(u.interests, myInterests) +
-          shared(u.languages, myLanguages);
-
-        let matchScore =
-          shared(u.travel_styles, myStyles) * 2 +
-          shared(u.connection_intentions, myIntentions) * 2 +
-          shared(u.interests, myInterests) +
-          shared(u.languages, myLanguages);
-        if (myDestination && city(u.destination) === myDestination) matchScore += 4;
-        const budgetGap = Math.abs(BUDGET_STEPS.indexOf(u.budget) - BUDGET_STEPS.indexOf(myBudget));
-        if (BUDGET_STEPS.includes(u.budget) && BUDGET_STEPS.includes(myBudget) && budgetGap <= 1) matchScore += 2 - budgetGap;
-
-        return {
-          ...u,
-          commonCount,
-          matchScore,
+        const common = {
+          styles: both(u.travel_styles, my.styles),
+          intentions: both(u.connection_intentions, my.intentions),
+          interests: both(u.interests, my.interests),
+          languages: both(u.languages, my.languages),
         };
-      });
+        const sameDestination = !!myDestination && cityOf(u.destination) === myDestination;
+        const gap = Math.abs(BUDGET_STEPS.indexOf(budgetId(u.budget)) - BUDGET_STEPS.indexOf(myBudget));
+        const budgetBonus = BUDGET_STEPS.includes(budgetId(u.budget)) && BUDGET_STEPS.includes(myBudget) && gap <= 1 ? 2 - gap : 0;
+        // Pesos maiores para o que mais pesa numa viagem juntos
+        const score =
+          common.styles.length * 2 + common.intentions.length * 2 + common.interests.length + common.languages.length +
+          (sameDestination ? 4 : 0) + budgetBonus;
 
-      // 4. Sort
-      if (filters.isTopRatedMode) {
-        // Sort by highest rating first
-        scoredUsers.sort((a, b) => b.rating - a.rating);
-      } else {
-        // Mais compatíveis primeiro
-        scoredUsers.sort((a, b) => b.matchScore - a.matchScore);
+        const { privacy_settings: _privacy, dob: _dob, ...rest } = u;
+        people.push({ ...rest, name, age, common, sameDestination, score });
       }
 
-      return scoredUsers;
+      // Mais compatíveis primeiro
+      return people.sort((a, b) => b.score - a.score);
+    },
+  });
+}
+
+/** Quem você quer ver e modo invisível (gravados no perfil). */
+export function useDiscoveryPrefs() {
+  return useQuery({
+    queryKey: ['discoveryPrefs'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const { data, error } = await supabase
+        .from('users')
+        .select('gender_preference, privacy_settings')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (error) throw error;
+      const g = data?.gender_preference;
+      return {
+        gender: (g === 'female' || g === 'male' ? g : 'all') as GenderPref,
+        invisible: data?.privacy_settings?.publicProfile === false,
+      };
+    },
+  });
+}
+
+export function useSaveDiscoveryPrefs() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ gender, invisible }: { gender: GenderPref; invisible: boolean }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      // Mantém as outras configurações de privacidade
+      const { data: row, error: readError } = await supabase
+        .from('users')
+        .select('privacy_settings')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (readError) throw readError;
+      const { error } = await supabase
+        .from('users')
+        .update({ gender_preference: gender, privacy_settings: { ...(row?.privacy_settings ?? {}), publicProfile: !invisible } })
+        .eq('id', user.id);
+      if (error) throw error;
+      return { gender, invisible };
+    },
+    onSuccess: (prefs) => {
+      queryClient.setQueryData(['discoveryPrefs'], prefs);
     },
   });
 }

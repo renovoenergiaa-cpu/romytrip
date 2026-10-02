@@ -95,3 +95,6 @@ export { CarIcon as Car } from 'phosphor-react-native/src/icons/Car';
 export { CreditCardIcon as CreditCard } from 'phosphor-react-native/src/icons/CreditCard';
 export { PillIcon as Pill } from 'phosphor-react-native/src/icons/Pill';
 export { MinusIcon as Minus } from 'phosphor-react-native/src/icons/Minus';
+export { SlidersHorizontalIcon as SlidersHorizontal } from 'phosphor-react-native/src/icons/SlidersHorizontal';
+export { HandshakeIcon as Handshake } from 'phosphor-react-native/src/icons/Handshake';
+export { SparkleIcon as Sparkle } from 'phosphor-react-native/src/icons/Sparkle';
