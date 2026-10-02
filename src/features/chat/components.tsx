@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import {
-  ActivityIndicator, Animated, Easing, Modal, Platform, Pressable, ScrollView, StyleSheet, Text,
-  TextInput, View,
+  ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, type ThemeColors } from '../../theme';
+import { Sheet } from '../../components/Sheet';
 import { Avatar } from '../onboarding/components';
 import {
   Archive, BellRinging, BellSlash, Camera, MagnifyingGlass, Microphone, Phone, SignOut, Trash,
@@ -129,7 +128,7 @@ const rowStyles = (c: ThemeColors) => StyleSheet.create({
 
 /* ─── Busca e filtros ──────────────────────────────────────────────────────── */
 
-export function SearchField({ value, onChangeText }: { value: string; onChangeText: (t: string) => void }) {
+export function SearchField({ value, onChangeText, placeholder = 'Buscar conversas' }: { value: string; onChangeText: (t: string) => void; placeholder?: string }) {
   const { colors } = useTheme();
   const s = useMemo(() => fieldStyles(colors), [colors]);
   return (
@@ -138,12 +137,12 @@ export function SearchField({ value, onChangeText }: { value: string; onChangeTe
       <TextInput
         value={value}
         onChangeText={onChangeText}
-        placeholder="Buscar conversas"
+        placeholder={placeholder}
         placeholderTextColor={colors.textMuted}
         selectionColor={colors.primary}
         returnKeyType="search"
         autoCorrect={false}
-        accessibilityLabel="Buscar conversas"
+        accessibilityLabel={placeholder}
         style={s.input}
       />
       {value.length > 0 && (
@@ -237,66 +236,6 @@ const emptyStyles = (c: ThemeColors) => StyleSheet.create({
   btnSecondary: { backgroundColor: c.primarySoft, height: 48 },
   btnText: { fontSize: 16, fontWeight: '700', color: c.onPrimary },
   btnTextSecondary: { color: c.primary },
-});
-
-/* ─── Folha inferior (nova conversa e opções) ──────────────────────────────── */
-
-function Sheet({ visible, onClose, title, children }: {
-  visible: boolean;
-  onClose: () => void;
-  title: string;
-  children: React.ReactNode;
-}) {
-  const { colors } = useTheme();
-  const s = useMemo(() => sheetStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
-  const [enter] = useState(() => new Animated.Value(0));
-
-  useEffect(() => {
-    if (!visible) return;
-    enter.setValue(0);
-    Animated.timing(enter, {
-      toValue: 1,
-      duration: 240,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: Platform.OS !== 'web',
-    }).start();
-  }, [visible, enter]);
-
-  return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
-      <Animated.View style={[s.overlay, { opacity: enter }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Fechar" />
-        <Animated.View
-          style={[
-            s.card,
-            { paddingBottom: Math.max(insets.bottom, 12) + 12, transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) }] },
-          ]}
-        >
-          <View style={s.handle} />
-          <View style={s.header}>
-            <Text style={s.title} numberOfLines={1} accessibilityRole="header">{title}</Text>
-            <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Fechar">
-              <X size={20} weight="bold" color={colors.textSecondary} />
-            </Pressable>
-          </View>
-          {children}
-        </Animated.View>
-      </Animated.View>
-    </Modal>
-  );
-}
-
-const sheetStyles = (c: ThemeColors) => StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-end' },
-  card: {
-    width: '100%', maxWidth: 560, alignSelf: 'center', maxHeight: '80%',
-    borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 10,
-    backgroundColor: c.card,
-  },
-  handle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', backgroundColor: c.border, marginBottom: 12 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 },
-  title: { flex: 1, fontSize: 20, fontWeight: '700', color: c.textPrimary, letterSpacing: -0.3 },
 });
 
 /* ─── Opções da conversa (toque e segure) ──────────────────────────────────── */
