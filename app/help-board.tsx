@@ -1,1004 +1,321 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  TextInput,
-  Modal,
-  ActivityIndicator,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-} from 'react-native';
+import { useMemo, useState } from 'react';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import {
-  ArrowLeft,
-  Plus,
-  Bell,
-  Pill,
-  Utensils,
-  CreditCard,
-  Car,
-  Check,
-  MessageSquare,
-  Users,
-  X,
-  MapPin,
-  Send,
-  Trash2,
-  Info,
-} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  useHelpRequests,
-  useCreateHelpRequest,
-  useResolveHelpRequest,
-  useHelpReplies,
-  useCreateHelpReply,
-  useDeleteHelpRequest,
+  useHelpRequests, useCreateHelpRequest, useResolveHelpRequest, useHelpReplies, useCreateHelpReply, useDeleteHelpRequest,
 } from '../src/hooks/useDiscovery';
-import { supabase } from '../src/lib/supabase';
-import { useTheme } from '../src/theme';
+import { useCurrentUserId } from '../src/hooks/useMessenger';
+import { useTheme, type ThemeColors } from '../src/theme';
+import { Sheet } from '../src/components/Sheet';
+import { confirmAction, showError } from '../src/lib/dialogs';
+import { Avatar } from '../src/features/onboarding/components';
+import { ChatEmpty, FilterChip } from '../src/features/chat/components';
+import { timeAgo } from '../src/features/feed/format';
+import {
+  Bell, CaretLeft, Car, Check, ChatCircleDots, CreditCard, ForkKnife, HandHeart, MapPin, PaperPlaneTilt, Pill, Plus, Trash, WifiSlash, type Icon,
+} from '../src/features/onboarding/icons';
 
-// ─── Design tokens ────────────────────────────────────────────────────────────
-const BG          = '#0A0A0C';
-const CARD        = '#141416';
-const BORDER      = '#222226';
-const MUTED       = '#A1A1AA';
-const PRIMARY     = '#6338FA';
-const PRIMARY_DIM = 'rgba(99,56,250,0.15)';
-const PRIMARY_BDR = 'rgba(99,56,250,0.3)';
-const GREEN       = '#22C55E';
-const GREEN_DIM   = 'rgba(34,197,94,0.12)';
-const RED         = '#EF4444';
-const RED_DIM     = 'rgba(239,68,68,0.1)';
+// O valor da categoria é gravado no banco (help_requests.category): NÃO alterar os nomes
+type Category = 'Restaurante' | 'Farmácia' | 'Transporte' | 'Câmbio/ATM' | 'Outros';
+const CATEGORIES: { value: Category; label: string; icon: Icon }[] = [
+  { value: 'Restaurante', label: 'Restaurante', icon: ForkKnife },
+  { value: 'Farmácia', label: 'Farmácia', icon: Pill },
+  { value: 'Transporte', label: 'Transporte', icon: Car },
+  { value: 'Câmbio/ATM', label: 'Câmbio e caixa eletrônico', icon: CreditCard },
+  { value: 'Outros', label: 'Outros', icon: Bell },
+];
+const categoryOf = (value?: string) => CATEGORIES.find((c) => c.value === value) ?? CATEGORIES[CATEGORIES.length - 1];
 
-// ─── Category config ──────────────────────────────────────────────────────────
-type CategoryKey = 'Restaurante' | 'Farmácia' | 'Transporte' | 'Câmbio/ATM' | 'Outros';
+const tone = (c: ThemeColors, value?: string) =>
+  value === 'Restaurante' ? c.warning : value === 'Farmácia' ? c.error : value === 'Transporte' ? c.success : value === 'Câmbio/ATM' ? c.info : c.textSecondary;
 
-const CAT: Record<CategoryKey, { icon: (s: number, c: string) => React.ReactNode; color: string; bg: string }> = {
-  'Restaurante': { icon: (s, c) => <Utensils  size={s} color={c} />, color: '#FB923C', bg: 'rgba(251,146,60,0.12)'  },
-  'Farmácia':   { icon: (s, c) => <Pill       size={s} color={c} />, color: '#F87171', bg: 'rgba(248,113,113,0.12)' },
-  'Transporte': { icon: (s, c) => <Car        size={s} color={c} />, color: GREEN,     bg: GREEN_DIM               },
-  'Câmbio/ATM': { icon: (s, c) => <CreditCard size={s} color={c} />, color: '#FBBF24', bg: 'rgba(251,191,36,0.12)' },
-  'Outros':     { icon: (s, c) => <Bell       size={s} color={c} />, color: MUTED,     bg: 'rgba(161,161,170,0.1)' },
+const soft = (hex: string, alpha = 0.14) => {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 };
 
-function catConf(cat?: string) {
-  return CAT[(cat as CategoryKey) ?? 'Outros'] ?? CAT['Outros'];
-}
+type StatusFilter = 'all' | 'active' | 'resolved';
+const FILTERS: { id: StatusFilter; label: string }[] = [
+  { id: 'all', label: 'Todas' },
+  { id: 'active', label: 'Ativas' },
+  { id: 'resolved', label: 'Resolvidas' },
+];
 
-const CATEGORIES: CategoryKey[] = ['Restaurante', 'Farmácia', 'Transporte', 'Câmbio/ATM', 'Outros'];
-const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80';
+const nameOf = (u?: { name?: string | null } | null) => String(u?.name ?? '').trim() || 'Viajante';
 
-// ─── Screen ───────────────────────────────────────────────────────────────────
-export default function HelpBoardScreen({ isEmbedded }: { isEmbedded?: boolean }) {
+// `city` é a cidade da pessoa: filtra os pedidos e vai gravada no pedido novo
+export default function HelpBoardScreen({ isEmbedded, city }: { isEmbedded?: boolean; city?: string }) {
   const router = useRouter();
-  const { colors, isDark } = useTheme();
-  const s = getStyles(colors, isDark);
-  const [filter, setFilter]                     = useState<'all' | 'active' | 'resolved'>('all');
-  const [modalVisible, setModalVisible]         = useState(false);
-  const [detailsModalVisible, setDetailsModalVisible] = useState(false);
-  const [selectedRequest, setSelectedRequest]   = useState<any>(null);
-  const [newCategory, setNewCategory]           = useState<CategoryKey>('Restaurante');
-  const [newContent, setNewContent]             = useState('');
-  const [replyText, setReplyText]               = useState('');
-  const [currentUserId, setCurrentUserId]       = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const s = useMemo(() => getStyles(colors), [colors]);
+  const currentUserId = useCurrentUserId();
+  const cityShort = city ? city.split(',')[0].trim() : '';
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setCurrentUserId(user.id);
-    });
-  }, []);
+  const [filter, setFilter] = useState<StatusFilter>('all');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [selected, setSelected] = useState<any>(null);
+  const [category, setCategory] = useState<Category>('Restaurante');
+  const [content, setContent] = useState('');
+  const [reply, setReply] = useState('');
 
-  const { data: helps,   isLoading }          = useHelpRequests(filter);
-  const { mutate: createHelp, isPending: isCreating } = useCreateHelpRequest();
-  const { mutate: resolveHelp, isPending: isResolving } = useResolveHelpRequest();
-  const { mutate: deleteHelp }                = useDeleteHelpRequest();
-  const { mutate: createReply, isPending: isReplying } = useCreateHelpReply();
-  const { data: replies, isLoading: isLoadingReplies } = useHelpReplies(selectedRequest?.id ?? '');
+  const { data: helps, isLoading, isError, refetch } = useHelpRequests(filter, cityShort || undefined);
+  const { mutate: createHelp, isPending: creating } = useCreateHelpRequest();
+  const { mutate: resolveHelp } = useResolveHelpRequest();
+  const { mutate: deleteHelp } = useDeleteHelpRequest();
+  const { mutate: createReply, isPending: replying } = useCreateHelpReply();
+  const { data: replies, isLoading: loadingReplies } = useHelpReplies(selected?.id ?? '');
 
-  const handleCreate = () => {
-    if (!newContent.trim()) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    createHelp({ category: newCategory, content: newContent, city: 'Local Atual' }, {
-      onSuccess: () => { setModalVisible(false); setNewContent(''); },
+  const tick = () => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); };
+
+  const publish = () => {
+    if (!content.trim()) return;
+    createHelp(
+      // Sem a cidade conhecida o pedido fica sem lugar (nunca mais "Local Atual")
+      { category, content: content.trim(), city: cityShort },
+      {
+        onSuccess: () => { setCreateOpen(false); setContent(''); },
+        onError: () => showError('Não foi possível publicar', 'Confira sua conexão e tente de novo.'),
+      },
+    );
+  };
+
+  const resolve = (id: string, then?: () => void) =>
+    resolveHelp({ requestId: id, status: 'resolved' }, { onSuccess: then, onError: () => showError('Não foi possível resolver', 'Tente de novo em instantes.') });
+
+  const remove = async (id: string) => {
+    const ok = await confirmAction({ title: 'Excluir pedido?', message: 'O pedido e as respostas somem para todo mundo.', confirmLabel: 'Excluir', destructive: true });
+    if (!ok) return;
+    deleteHelp(id, { onSuccess: () => setSelected(null), onError: () => showError('Não foi possível excluir', 'Tente de novo em instantes.') });
+  };
+
+  const sendReply = () => {
+    if (!reply.trim() || !selected) return;
+    createReply({ requestId: selected.id, content: reply.trim() }, {
+      onSuccess: () => setReply(''),
+      onError: () => showError('Não foi possível responder', 'Tente de novo em instantes.'),
     });
   };
 
-  const FILTERS: { key: 'all' | 'active' | 'resolved'; label: string }[] = [
-    { key: 'all',      label: 'Todas'     },
-    { key: 'active',   label: 'Ativas'    },
-    { key: 'resolved', label: 'Resolvidas'},
-  ];
+  const isMine = (h: any) => !!currentUserId && currentUserId === h.user_id;
 
   return (
     <View style={s.root}>
-      {/* ─── Header ─────────────────────────────────────────────────────── */}
       {!isEmbedded && (
-        <View style={s.standaloneHeader}>
-          <TouchableOpacity onPress={() => router.back()} style={s.backBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <ArrowLeft size={22} color={isDark ? '#FFF' : colors.textPrimary} />
-          </TouchableOpacity>
+        <View style={[s.standalone, { paddingTop: insets.top + 8 }]}>
+          <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} hitSlop={8} accessibilityRole="button" accessibilityLabel="Voltar" style={s.back}>
+            <CaretLeft size={22} weight="bold" color={colors.textPrimary} />
+          </Pressable>
         </View>
       )}
 
-      <View style={[s.header, isEmbedded && { paddingTop: 0 }]}>
-        <View style={{ flex: 1 }}>
-          <Text style={s.headerTitle}>Ajudinha 🤝</Text>
-          <Text style={s.headerSub}>Peça ou ofereça ajuda para quem está por perto</Text>
-        </View>
-        <TouchableOpacity
-          style={s.addBtn}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            setModalVisible(true);
-          }}
-          activeOpacity={0.8}
-        >
-          <Plus size={18} color="#FFF" strokeWidth={2.5} />
-        </TouchableOpacity>
-      </View>
-
-      {/* ─── Info banner ──────────────────────────────────────────────── */}
-      <View style={s.banner}>
-        <Info size={14} color="#C4B5FD" />
-        <Text style={s.bannerText}>
-          Suas perguntas notificam{' '}
-          <Text style={{ color: '#C4B5FD', fontWeight: '700' }}>viajantes no mesmo local</Text>
-          . Ajudas resolvidas somem automaticamente.
-        </Text>
-      </View>
-
-      {/* ─── Filters ──────────────────────────────────────────────────── */}
-      <View style={s.filterRow}>
-        {FILTERS.map(f => (
-          <TouchableOpacity
-            key={f.key}
-            style={[s.filterPill, filter === f.key && s.filterPillActive]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setFilter(f.key);
-            }}
-            activeOpacity={0.8}
-          >
-            <Text style={[s.filterPillText, filter === f.key && s.filterPillTextActive]}>{f.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* ─── List ─────────────────────────────────────────────────────── */}
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        {isLoading ? (
-          <ActivityIndicator color={PRIMARY} style={{ marginTop: 40 }} />
-        ) : helps && helps.length > 0 ? (
-          helps.map((help: any) => {
-            const author     = help.users ?? {};
-            const isResolved = help.status === 'resolved';
-            const cc         = catConf(help.category);
-
-            return (
-              <TouchableOpacity
-                key={help.id}
-                style={[s.card, isResolved && s.cardResolved]}
-                activeOpacity={0.78}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setSelectedRequest(help);
-                  setDetailsModalVisible(true);
-                }}
-              >
-                {/* Top row: category badge + status */}
-                <View style={s.cardTopRow}>
-                  <View style={[s.catBadge, { backgroundColor: cc.bg }]}>
-                    {cc.icon(12, cc.color)}
-                    <Text style={[s.catBadgeText, { color: cc.color }]}>{help.category}</Text>
-                  </View>
-                  {isResolved ? (
-                    <View style={s.resolvedBadge}>
-                      <Check size={11} color={GREEN} />
-                      <Text style={s.resolvedBadgeText}>Resolvido</Text>
-                    </View>
-                  ) : (
-                    <View style={s.activeBadge}>
-                      <View style={s.activeDot} />
-                      <Text style={s.activeBadgeText}>Ativo</Text>
-                    </View>
-                  )}
-                </View>
-
-                {/* Content */}
-                <Text style={s.cardContent} numberOfLines={3}>{help.content}</Text>
-
-                {/* Footer */}
-                <View style={s.cardFooter}>
-                  <Image
-                    source={{ uri: author.photos?.[0] ?? DEFAULT_AVATAR }}
-                    style={s.authorAvatar}
-                  />
-                  <Text style={s.authorName} numberOfLines={1}>{author.name ?? 'Viajante'}</Text>
-                  <View style={s.dot} />
-                  <MapPin size={11} color={MUTED} />
-                  <Text style={s.authorCity} numberOfLines={1}>{help.city}</Text>
-                </View>
-
-                {/* Resolve CTA (only if not resolved) */}
-                {!isResolved && currentUserId === help.user_id && (
-                  <TouchableOpacity
-                    style={s.resolveBtn}
-                    onPress={(e) => {
-                      e.stopPropagation?.();
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      resolveHelp({ requestId: help.id, status: 'resolved' });
-                    }}
-                    disabled={isResolving}
-                    activeOpacity={0.8}
-                  >
-                    <Check size={13} color={GREEN} />
-                    <Text style={s.resolveBtnText}>Marcar como resolvido</Text>
-                  </TouchableOpacity>
-                )}
-              </TouchableOpacity>
-            );
-          })
-        ) : (
-          <View style={s.empty}>
-            <View style={s.emptyIconWrap}>
-              <MessageSquare size={28} color={PRIMARY} />
-            </View>
-            <Text style={s.emptyTitle}>Nenhuma solicitação</Text>
-            <Text style={s.emptySub}>Seja o primeiro a pedir ajuda por aqui!</Text>
-            <TouchableOpacity
-              style={s.emptyAction}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                setModalVisible(true);
-              }}
-            >
-              <Plus size={14} color={PRIMARY} />
-              <Text style={s.emptyActionText}>Pedir ajuda</Text>
-            </TouchableOpacity>
+        <View style={s.head}>
+          <View style={{ flex: 1 }}>
+            <Text style={s.title} accessibilityRole="header">Ajudinha</Text>
+            <Text style={s.sub}>{cityShort ? `Pedidos de viajantes em ${cityShort}` : 'Peça ou ofereça ajuda a outros viajantes'}</Text>
           </View>
+          <Pressable onPress={() => { tick(); setCreateOpen(true); }} accessibilityRole="button" accessibilityLabel="Pedir ajuda" style={({ pressed }) => [s.ask, pressed && s.pressed]}>
+            <Plus size={18} weight="bold" color={colors.onPrimary} />
+            <Text style={s.askText}>Pedir ajuda</Text>
+          </Pressable>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} accessibilityRole="tablist">
+          {FILTERS.map((f) => <FilterChip key={f.id} label={f.label} selected={filter === f.id} onPress={() => setFilter(f.id)} />)}
+        </ScrollView>
+
+        {isLoading ? (
+          <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} accessibilityLabel="Carregando pedidos" />
+        ) : isError && !helps ? (
+          <ChatEmpty icon={WifiSlash} title="Não conseguimos carregar" text="Confira sua internet e tente de novo." action="Tentar de novo" onAction={() => refetch()} secondary />
+        ) : helps && helps.length > 0 ? (
+          <View style={{ gap: 12 }}>
+            {helps.map((help: any) => {
+              const cat = categoryOf(help.category);
+              const color = tone(colors, help.category);
+              const resolved = help.status === 'resolved';
+              const author = nameOf(help.users);
+              return (
+                <Pressable key={help.id} onPress={() => { tick(); setSelected(help); }} accessibilityRole="button" accessibilityLabel={`Pedido de ${author}: ${help.content}`} style={({ pressed }) => [s.card, resolved && { opacity: 0.7 }, pressed && s.pressed]}>
+                  <View style={s.cardTop}>
+                    <View style={[s.tag, { backgroundColor: soft(color) }]}>
+                      <cat.icon size={14} weight="duotone" color={color} />
+                      <Text style={[s.tagText, { color }]}>{cat.label}</Text>
+                    </View>
+                    <View style={[s.status, { backgroundColor: resolved ? colors.successSoft : colors.primarySoft }]}>
+                      {resolved ? <Check size={12} weight="bold" color={colors.success} /> : null}
+                      <Text style={[s.statusText, { color: resolved ? colors.success : colors.primary }]}>{resolved ? 'Resolvido' : 'Ativo'}</Text>
+                    </View>
+                  </View>
+                  <Text style={s.content} numberOfLines={3}>{help.content}</Text>
+                  <View style={s.foot}>
+                    <Avatar photo={help.users?.photos?.[0]} name={author} size={24} />
+                    <Text style={s.footText} numberOfLines={1}>{author}</Text>
+                    {help.city ? <><MapPin size={14} weight="fill" color={colors.textMuted} /><Text style={s.footText} numberOfLines={1}>{help.city}</Text></> : null}
+                    {help.created_at ? <Text style={[s.footText, { marginLeft: 'auto' }]}>{timeAgo(help.created_at)}</Text> : null}
+                  </View>
+                  {!resolved && isMine(help) ? (
+                    <Pressable onPress={() => resolve(help.id)} accessibilityRole="button" style={({ pressed }) => [s.resolveBtn, pressed && s.pressed]}>
+                      <Check size={16} weight="bold" color={colors.success} /><Text style={s.resolveText}>Marcar como resolvido</Text>
+                    </Pressable>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : (
+          <ChatEmpty
+            icon={HandHeart}
+            title={filter === 'resolved' ? 'Nenhum pedido resolvido' : 'Nenhum pedido por aqui'}
+            text={filter === 'resolved' ? 'Os pedidos que forem resolvidos aparecem nesta lista.' : cityShort ? `Ninguém pediu ajuda em ${cityShort} ainda. Precisando de algo, é só perguntar.` : 'Ninguém pediu ajuda ainda. Precisando de algo, é só perguntar.'}
+            action={filter === 'resolved' ? undefined : 'Pedir ajuda'}
+            onAction={() => setCreateOpen(true)}
+          />
         )}
       </ScrollView>
 
-      {/* ─── Create Modal ─────────────────────────────────────────────── */}
-      <Modal visible={modalVisible} animationType="slide" transparent>
-        <View style={s.modalOverlay}>
-          <View style={s.modalSheet}>
-            <View style={s.modalHandle} />
-
-            <View style={s.modalHeaderRow}>
-              <Text style={s.modalTitle}>Pedir Ajuda</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <X size={22} color={MUTED} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={s.inputLabel}>Categoria</Text>
-            <View style={s.catSelector}>
-              {CATEGORIES.map(cat => {
-                const cc  = catConf(cat);
-                const sel = newCategory === cat;
+      {/* Novo pedido */}
+      <Sheet visible={createOpen} onClose={() => setCreateOpen(false)} title="Pedir ajuda" fill>
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 18, paddingBottom: 12 }}>
+          <View style={s.field}>
+            <Text style={s.label}>Sobre o quê?</Text>
+            <View style={s.cats}>
+              {CATEGORIES.map((c) => {
+                const on = category === c.value;
+                const color = tone(colors, c.value);
                 return (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[s.catOption, sel && { backgroundColor: cc.bg, borderColor: cc.color }]}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setNewCategory(cat);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    {cc.icon(13, sel ? cc.color : MUTED)}
-                    <Text style={[s.catOptionText, sel && { color: cc.color, fontWeight: '700' }]}>{cat}</Text>
-                  </TouchableOpacity>
+                  <Pressable key={c.value} onPress={() => { tick(); setCategory(c.value); }} accessibilityRole="radio" accessibilityState={{ checked: on }} style={[s.cat, on && { borderColor: color, backgroundColor: soft(color) }]}>
+                    <c.icon size={20} weight={on ? 'fill' : 'duotone'} color={on ? color : colors.textSecondary} />
+                    <Text style={[s.catText, on && { color, fontWeight: '800' }]}>{c.label}</Text>
+                  </Pressable>
                 );
               })}
             </View>
-
-            <Text style={s.inputLabel}>Sua pergunta</Text>
-            <TextInput
-              style={s.textInput}
-              multiline
-              numberOfLines={4}
-              placeholder="Ex: Onde tem farmácia aberta de madrugada por aqui?"
-              placeholderTextColor={MUTED}
-              value={newContent}
-              onChangeText={setNewContent}
-            />
-
-            <TouchableOpacity
-              style={[s.submitBtn, (!newContent.trim() || isCreating) && { opacity: 0.45 }]}
-              onPress={handleCreate}
-              disabled={!newContent.trim() || isCreating}
-              activeOpacity={0.85}
-            >
-              {isCreating
-                ? <ActivityIndicator color="#FFF" />
-                : <Text style={s.submitBtnText}>Publicar Pedido</Text>}
-            </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
+          <View style={s.field}>
+            <Text style={s.label}>Sua pergunta</Text>
+            <TextInput value={content} onChangeText={setContent} placeholder="Ex.: onde tem farmácia aberta de madrugada por aqui?" placeholderTextColor={colors.textMuted} selectionColor={colors.primary} multiline maxLength={400} accessibilityLabel="Sua pergunta" style={s.textArea} />
+            <Text style={s.hint}>{cityShort ? `O pedido aparece para quem está em ${cityShort}.` : 'Não sabemos sua cidade (localização desligada); o pedido aparece para todo mundo.'}</Text>
+          </View>
+        </ScrollView>
+        <Pressable onPress={publish} disabled={!content.trim() || creating} accessibilityRole="button" style={({ pressed }) => [s.cta, (!content.trim() || creating) && s.ctaOff, pressed && s.pressed]}>
+          {creating ? <ActivityIndicator color={colors.onPrimary} /> : <Text style={[s.ctaText, !content.trim() && { color: colors.textMuted }]}>Publicar pedido</Text>}
+        </Pressable>
+      </Sheet>
 
-      {/* ─── Details Modal ────────────────────────────────────────────── */}
-      <Modal visible={detailsModalVisible} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
-          <View style={[s.modalSheet, { height: '90%', paddingBottom: 0 }]}>
-            <View style={s.modalHandle} />
-
-            <View style={s.modalHeaderRow}>
-              <Text style={s.modalTitle}>Detalhes do Pedido</Text>
-              <TouchableOpacity
-                onPress={() => { setDetailsModalVisible(false); setSelectedRequest(null); }}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <X size={22} color={MUTED} />
-              </TouchableOpacity>
-            </View>
-
-            {selectedRequest && (
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
-                {/* Author */}
-                <View style={s.detailAuthorRow}>
-                  <Image
-                    source={{ uri: selectedRequest.users?.photos?.[0] ?? DEFAULT_AVATAR }}
-                    style={s.detailAvatar}
-                  />
-                  <View>
-                    <Text style={s.detailAuthorName}>{selectedRequest.users?.name ?? 'Viajante'}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                      <MapPin size={11} color={MUTED} />
-                      <Text style={s.detailAuthorCity}>{selectedRequest.city}</Text>
-                    </View>
-                  </View>
+      {/* Detalhes e respostas */}
+      <Sheet visible={!!selected} onClose={() => { setSelected(null); setReply(''); }} title="Pedido de ajuda" fill>
+        {selected ? (
+          <>
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 14, paddingBottom: 12 }}>
+              <View style={s.author}>
+                <Avatar photo={selected.users?.photos?.[0]} name={nameOf(selected.users)} size={44} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.authorName}>{nameOf(selected.users)}</Text>
+                  {selected.city ? <View style={s.metaRow}><MapPin size={14} weight="fill" color={colors.textMuted} /><Text style={s.footText}>{selected.city}</Text></View> : null}
                 </View>
+              </View>
+              <Text style={s.detail} selectable>{selected.content}</Text>
 
-                {/* Content */}
-                <Text style={s.detailContent}>{selectedRequest.content}</Text>
+              {isMine(selected) ? (
+                <View style={s.owner}>
+                  {selected.status !== 'resolved' ? (
+                    <Pressable onPress={() => resolve(selected.id, () => setSelected(null))} accessibilityRole="button" style={[s.ownerBtn, { backgroundColor: colors.successSoft }]}>
+                      <Check size={18} weight="bold" color={colors.success} /><Text style={[s.ownerText, { color: colors.success }]}>Resolvido</Text>
+                    </Pressable>
+                  ) : null}
+                  <Pressable onPress={() => remove(selected.id)} accessibilityRole="button" style={[s.ownerBtn, { backgroundColor: colors.errorSoft }]}>
+                    <Trash size={18} weight="bold" color={colors.error} /><Text style={[s.ownerText, { color: colors.error }]}>Excluir</Text>
+                  </Pressable>
+                </View>
+              ) : null}
 
-                {/* Owner actions */}
-                {currentUserId === selectedRequest.user_id && (
-                  <View style={s.ownerActions}>
-                    {!selectedRequest.status?.includes('resolved') && (
-                      <TouchableOpacity
-                        style={s.ownerResolveBtn}
-                        onPress={() => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                          resolveHelp({ requestId: selectedRequest.id, status: 'resolved' }, {
-                            onSuccess: () => setDetailsModalVisible(false),
-                          });
-                        }}
-                        activeOpacity={0.85}
-                      >
-                        <Check size={14} color={GREEN} />
-                        <Text style={s.ownerResolveBtnText}>Resolver</Text>
-                      </TouchableOpacity>
-                    )}
-                    <TouchableOpacity
-                      style={s.ownerDeleteBtn}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        Alert.alert('Excluir Pedido', 'Tem certeza que deseja excluir?', [
-                          { text: 'Cancelar', style: 'cancel' },
-                          { text: 'Excluir', style: 'destructive', onPress: () => {
-                            deleteHelp(selectedRequest.id, { onSuccess: () => setDetailsModalVisible(false) });
-                          }},
-                        ]);
-                      }}
-                      activeOpacity={0.85}
-                    >
-                      <Trash2 size={14} color={RED} />
-                      <Text style={s.ownerDeleteBtnText}>Excluir</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                <View style={s.divider} />
-                <Text style={s.repliesTitle}>Respostas</Text>
-
-                {isLoadingReplies ? (
-                  <ActivityIndicator color={PRIMARY} style={{ marginTop: 16 }} />
-                ) : replies && replies.length > 0 ? (
-                  replies.map((reply: any) => (
-                    <View key={reply.id} style={s.replyCard}>
-                      <View style={s.replyAuthorRow}>
-                        <Image
-                          source={{ uri: reply.users?.photos?.[0] ?? DEFAULT_AVATAR }}
-                          style={s.replyAvatar}
-                        />
-                        <Text style={s.replyAuthorName}>{reply.users?.name ?? 'Viajante'}</Text>
-                      </View>
-                      <Text style={s.replyContent}>{reply.content}</Text>
+              <Text style={s.repliesTitle}>Respostas</Text>
+              {loadingReplies ? (
+                <ActivityIndicator color={colors.primary} />
+              ) : replies && replies.length > 0 ? (
+                replies.map((r: any) => (
+                  <View key={r.id} style={s.reply}>
+                    <Avatar photo={r.users?.photos?.[0]} name={nameOf(r.users)} size={32} />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={s.replyName}>{nameOf(r.users)}{r.created_at ? <Text style={s.replyWhen}>{`  ${timeAgo(r.created_at)}`}</Text> : null}</Text>
+                      <Text style={s.replyText} selectable>{r.content}</Text>
                     </View>
-                  ))
-                ) : (
-                  <Text style={s.noRepliesText}>Nenhuma resposta ainda. Seja o primeiro a ajudar!</Text>
-                )}
-              </ScrollView>
-            )}
+                  </View>
+                ))
+              ) : (
+                <View style={s.noReplies}><ChatCircleDots size={28} weight="duotone" color={colors.textMuted} /><Text style={s.hint}>Ninguém respondeu ainda. Sabe a resposta? Ajude!</Text></View>
+              )}
+            </ScrollView>
 
-            {/* Reply input */}
-            <View style={s.replyInputBar}>
-              <TextInput
-                style={s.replyInput}
-                placeholder="Escreva uma resposta..."
-                placeholderTextColor={MUTED}
-                value={replyText}
-                onChangeText={setReplyText}
-              />
-              <TouchableOpacity
-                style={[s.replySendBtn, (!replyText.trim() || isReplying) && { opacity: 0.4 }]}
-                onPress={() => {
-                  if (!replyText.trim()) return;
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  createReply({ requestId: selectedRequest.id, content: replyText }, {
-                    onSuccess: () => setReplyText(''),
-                  });
-                }}
-                disabled={!replyText.trim() || isReplying}
-                activeOpacity={0.85}
-              >
-                {isReplying
-                  ? <ActivityIndicator size="small" color="#FFF" />
-                  : <Send size={16} color="#FFF" style={{ marginLeft: 1 }} />}
-              </TouchableOpacity>
+            <View style={s.replyBar}>
+              <TextInput value={reply} onChangeText={setReply} placeholder="Escreva uma resposta" placeholderTextColor={colors.textMuted} selectionColor={colors.primary} maxLength={400} returnKeyType="send" onSubmitEditing={sendReply} accessibilityLabel="Escreva uma resposta" style={s.replyInput} />
+              <Pressable onPress={sendReply} disabled={!reply.trim() || replying} accessibilityRole="button" accessibilityLabel="Enviar resposta" style={[s.send, (!reply.trim() || replying) && { opacity: 0.45 }]}>
+                {replying ? <ActivityIndicator size="small" color={colors.onPrimary} /> : <PaperPlaneTilt size={22} weight="fill" color={colors.onPrimary} />}
+              </Pressable>
             </View>
-
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+          </>
+        ) : null}
+      </Sheet>
     </View>
   );
 }
 
-const getStyles = (colors: any, isDark: boolean) => {
-  const BG          = isDark ? '#0A0A0C' : colors.background;
-  const CARD        = isDark ? '#141416' : colors.card;
-  const SHEET       = isDark ? '#111114' : colors.card;
-  const BORDER      = isDark ? '#222226' : colors.border;
-  const MUTED       = isDark ? '#A1A1AA' : colors.textSecondary;
-  const TEXT        = isDark ? '#FFFFFF' : colors.textPrimary;
-  const PRIMARY     = '#6338FA';
-  const PRIMARY_DIM = isDark ? 'rgba(99,56,250,0.15)' : 'rgba(99,56,250,0.08)';
-  const PRIMARY_BDR = isDark ? 'rgba(99,56,250,0.3)' : 'rgba(99,56,250,0.2)';
-  const GREEN       = '#22C55E';
-  const GREEN_DIM   = 'rgba(34,197,94,0.12)';
-  const RED         = '#EF4444';
-  const RED_DIM     = 'rgba(239,68,68,0.1)';
+const getStyles = (c: ThemeColors) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.background },
+  pressed: { transform: [{ scale: 0.98 }] },
+  standalone: { paddingHorizontal: 20, paddingBottom: 4 },
+  back: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.card, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
+  scroll: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 40, gap: 14, width: '100%', maxWidth: 560, alignSelf: 'center' },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  title: { fontSize: 30, fontWeight: '800', color: c.textPrimary, letterSpacing: -0.8 },
+  sub: { fontSize: 14, color: c.textSecondary, marginTop: 2 },
+  ask: { height: 44, paddingHorizontal: 14, borderRadius: 22, backgroundColor: c.primary, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  askText: { fontSize: 14, fontWeight: '700', color: c.onPrimary },
+  chips: { gap: 8, paddingRight: 20 },
 
-  return StyleSheet.create({
-    root: { flex: 1, backgroundColor: BG },
+  card: { padding: 14, gap: 10, borderRadius: 20, backgroundColor: c.card, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border },
+  cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  tag: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 28, paddingHorizontal: 10, borderRadius: 14, flexShrink: 1 },
+  tagText: { fontSize: 12, fontWeight: '800', flexShrink: 1 },
+  status: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 24, paddingHorizontal: 10, borderRadius: 12 },
+  statusText: { fontSize: 12, fontWeight: '800' },
+  content: { fontSize: 16, lineHeight: 23, color: c.textPrimary },
+  foot: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  footText: { fontSize: 13, color: c.textSecondary, flexShrink: 1 },
+  resolveBtn: { height: 42, borderRadius: 14, backgroundColor: c.successSoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  resolveText: { fontSize: 14, fontWeight: '700', color: c.success },
 
-  standaloneHeader: {
-    paddingTop: Platform.OS === 'ios' ? 56 : 40,
-    paddingHorizontal: 18,
-    paddingBottom: 4,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: CARD,
-    borderWidth: 1,
-    borderColor: BORDER,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  field: { gap: 8 },
+  label: { fontSize: 14, fontWeight: '700', color: c.textPrimary },
+  hint: { fontSize: 13, lineHeight: 18, color: c.textSecondary },
+  cats: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  cat: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: 14, borderRadius: 22, backgroundColor: c.surface, borderWidth: 1.5, borderColor: 'transparent' },
+  catText: { fontSize: 14, fontWeight: '600', color: c.textPrimary },
+  textArea: { minHeight: 110, maxHeight: 200, borderRadius: 16, padding: 14, fontSize: 16, lineHeight: 22, textAlignVertical: 'top', color: c.textPrimary, backgroundColor: c.surface, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null) },
+  cta: { height: 54, borderRadius: 18, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  ctaOff: { backgroundColor: c.surface },
+  ctaText: { fontSize: 17, fontWeight: '700', color: c.onPrimary },
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: Platform.OS === 'ios' ? 14 : 10,
-    paddingHorizontal: 18,
-    paddingBottom: 14,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: TEXT,
-    letterSpacing: -0.4,
-  },
-  headerSub: {
-    fontSize: 13,
-    color: MUTED,
-    marginTop: 2,
-    fontWeight: '500',
-  },
-  addBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: PRIMARY,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: PRIMARY,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.45,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-
-  // Banner
-  banner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    backgroundColor: PRIMARY_DIM,
-    borderWidth: 1,
-    borderColor: PRIMARY_BDR,
-    marginHorizontal: 18,
-    padding: 12,
-    borderRadius: 14,
-    marginBottom: 16,
-  },
-  bannerText: {
-    flex: 1,
-    fontSize: 12.5,
-    color: '#C4B5FD',
-    lineHeight: 18,
-    fontWeight: '500',
-  },
-
-  // Filters
-  filterRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 18,
-    gap: 8,
-    marginBottom: 16,
-  },
-  filterPill: {
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: 24,
-    backgroundColor: CARD,
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  filterPillActive: {
-    backgroundColor: PRIMARY,
-    borderColor: PRIMARY,
-  },
-  filterPillText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: MUTED,
-  },
-  filterPillTextActive: {
-    color: '#FFF',
-  },
-
-  scroll: {
-    paddingHorizontal: 18,
-    paddingBottom: 100,
-  },
-
-  // Card
-  card: {
-    backgroundColor: CARD,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: BORDER,
-    padding: 16,
-    marginBottom: 12,
-    gap: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  cardResolved: {
-    borderColor: 'rgba(34,197,94,0.25)',
-    backgroundColor: 'rgba(34,197,94,0.05)',
-  },
-  cardTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  catBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  catBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  resolvedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: GREEN_DIM,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  resolvedBadgeText: {
-    fontSize: 11,
-    color: GREEN,
-    fontWeight: '700',
-  },
-  activeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: PRIMARY_DIM,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  activeDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: PRIMARY,
-  },
-  activeBadgeText: {
-    fontSize: 11,
-    color: '#C4B5FD',
-    fontWeight: '700',
-  },
-  cardContent: {
-    fontSize: 14.5,
-    fontWeight: '600',
-    color: isDark ? '#E4E4E7' : colors.textPrimary,
-    lineHeight: 21,
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-  },
-  authorAvatar: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#333',
-  },
-  authorName: {
-    fontSize: 12,
-    color: TEXT,
-    fontWeight: '600',
-    flexShrink: 1,
-  },
-  dot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: MUTED,
-    marginHorizontal: 2,
-  },
-  authorCity: {
-    fontSize: 12,
-    color: MUTED,
-    fontWeight: '500',
-    flexShrink: 1,
-  },
-  resolveBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: GREEN_DIM,
-    borderRadius: 12,
-    paddingVertical: 9,
-    borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.25)',
-  },
-  resolveBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: GREEN,
-  },
-
-  // Empty state
-  empty: {
-    alignItems: 'center',
-    paddingVertical: 56,
-    paddingHorizontal: 24,
-  },
-  emptyIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: PRIMARY_DIM,
-    borderWidth: 1,
-    borderColor: PRIMARY_BDR,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: TEXT,
-    marginBottom: 6,
-  },
-  emptySub: {
-    fontSize: 13,
-    color: MUTED,
-    textAlign: 'center',
-    lineHeight: 19,
-  },
-  emptyAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 20,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 14,
-    backgroundColor: PRIMARY_DIM,
-    borderWidth: 1,
-    borderColor: PRIMARY_BDR,
-  },
-  emptyActionText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: PRIMARY,
-  },
-
-  // Modals
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
-    backgroundColor: SHEET,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderWidth: 1,
-    borderColor: BORDER,
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-    paddingTop: 12,
-  },
-  modalHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: BORDER,
-    alignSelf: 'center',
-    marginBottom: 20,
-  },
-  modalHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 22,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: TEXT,
-    letterSpacing: -0.3,
-  },
-  inputLabel: {
-    fontSize: 13.5,
-    fontWeight: '700',
-    color: TEXT,
-    marginBottom: 10,
-  },
-
-  // Category selector in modal
-  catSelector: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 20,
-  },
-  catOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: isDark ? CARD : colors.surface,
-    borderWidth: 1,
-    borderColor: BORDER,
-  },
-  catOptionText: {
-    fontSize: 13,
-    color: MUTED,
-    fontWeight: '600',
-  },
-
-  textInput: {
-    backgroundColor: isDark ? CARD : colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: BORDER,
-    padding: 14,
-    fontSize: 14,
-    color: TEXT,
-    textAlignVertical: 'top',
-    height: 110,
-    marginBottom: 20,
-  },
-  submitBtn: {
-    backgroundColor: PRIMARY,
-    height: 52,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: PRIMARY,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  submitBtnText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#FFF',
-    letterSpacing: 0.1,
-  },
-
-  // Details modal content
-  detailAuthorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 14,
-  },
-  detailAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#333',
-    borderWidth: 1.5,
-    borderColor: BORDER,
-  },
-  detailAuthorName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: TEXT,
-  },
-  detailAuthorCity: {
-    fontSize: 12,
-    color: MUTED,
-    fontWeight: '500',
-  },
-  detailContent: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: TEXT,
-    lineHeight: 24,
-    marginBottom: 16,
-  },
-  ownerActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
-  },
-  ownerResolveBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: GREEN_DIM,
-    borderRadius: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.25)',
-  },
-  ownerResolveBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: GREEN,
-  },
-  ownerDeleteBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: RED_DIM,
-    borderRadius: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.2)',
-  },
-  ownerDeleteBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: RED,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: BORDER,
-    marginVertical: 16,
-  },
-  repliesTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: TEXT,
-    marginBottom: 12,
-  },
-  replyCard: {
-    backgroundColor: isDark ? CARD : colors.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: BORDER,
-    padding: 12,
-    marginBottom: 10,
-    gap: 6,
-  },
-  replyAuthorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  replyAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#333',
-  },
-  replyAuthorName: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: TEXT,
-  },
-  replyContent: {
-    fontSize: 13.5,
-    color: isDark ? '#E4E4E7' : colors.textPrimary,
-    lineHeight: 19,
-  },
-  noRepliesText: {
-    fontSize: 13,
-    color: MUTED,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    paddingVertical: 16,
-  },
-  replyInputBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-    paddingTop: 12,
-    paddingBottom: Platform.OS === 'ios' ? 8 : 4,
-  },
-  replyInput: {
-    flex: 1,
-    backgroundColor: CARD,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: BORDER,
-    paddingHorizontal: 14,
-    height: 42,
-    fontSize: 14,
-    color: TEXT,
-  },
-  replySendBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: PRIMARY,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: PRIMARY,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  });
-};
+  author: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  authorName: { fontSize: 17, fontWeight: '700', color: c.textPrimary },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  detail: { fontSize: 17, lineHeight: 25, color: c.textPrimary },
+  owner: { flexDirection: 'row', gap: 10 },
+  ownerBtn: { flex: 1, height: 44, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  ownerText: { fontSize: 15, fontWeight: '700' },
+  repliesTitle: { fontSize: 17, fontWeight: '700', color: c.textPrimary, marginTop: 6 },
+  reply: { flexDirection: 'row', gap: 10 },
+  replyName: { fontSize: 15, fontWeight: '700', color: c.textPrimary },
+  replyWhen: { fontSize: 13, fontWeight: '400', color: c.textMuted },
+  replyText: { fontSize: 15, lineHeight: 21, color: c.textPrimary, marginTop: 1 },
+  noReplies: { alignItems: 'center', gap: 8, paddingVertical: 20 },
+  replyBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border },
+  replyInput: { flex: 1, minWidth: 0, height: 46, borderRadius: 23, paddingHorizontal: 18, fontSize: 16, color: c.textPrimary, backgroundColor: c.surface, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null) },
+  send: { width: 46, height: 46, borderRadius: 23, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
+});

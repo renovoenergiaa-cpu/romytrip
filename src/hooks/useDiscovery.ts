@@ -62,9 +62,9 @@ export function useToggleFreeStatus() {
 }
 
 // Fetch help requests
-export function useHelpRequests(filter: 'all' | 'active' | 'resolved') {
+export function useHelpRequests(filter: 'all' | 'active' | 'resolved', city?: string) {
   return useQuery({
-    queryKey: ['helpRequests', filter],
+    queryKey: ['helpRequests', filter, city ?? null],
     queryFn: async () => {
       let query = supabase
         .from('help_requests')
@@ -75,7 +75,11 @@ export function useHelpRequests(filter: 'all' | 'active' | 'resolved') {
             photos
           )
         `)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      // Só os pedidos da cidade da pessoa (quando ela é conhecida)
+      if (city) query = query.ilike('city', `%${city}%`);
 
       if (filter === 'active') {
         query = query.eq('status', 'active');
